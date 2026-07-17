@@ -1,0 +1,19 @@
+{
+  "name": "product-recommender-agent",
+  "version": "1.0.0",
+  "description": "Generic product recommendation agent backed by a Google Sheet, deployable as a REST API. Works with or without an LLM.",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.14.1",
+    "googleapis": "^144.0.0",
+    "uuid": "^9.0.1"
+  }
+}
