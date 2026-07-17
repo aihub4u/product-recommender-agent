@@ -1,4 +1,5 @@
 const express = require('express');
+const cors = require('cors');
 const config = require('./config');
 const productStore = require('./productStore');
 const sessionStore = require('./sessionStore');
@@ -6,6 +7,7 @@ const recommendRoutes = require('./routes/recommend');
 const engine = require('./engines');
 
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 app.use('/api', recommendRoutes);
