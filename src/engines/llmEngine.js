@@ -1,14 +1,7 @@
-const Anthropic = require('@anthropic-ai/sdk');
 const config = require('../config');
 const ruleEngine = require('./ruleEngine');
 
-let client = null;
-function getClient() {
-  if (!client) client = new Anthropic({ apiKey: config.anthropicApiKey });
-  return client;
-}
-
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
+const MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
 
 // Keep the catalog sent to the LLM small: pre-filter with the rule engine's
 // keyword/tag matching so we're not shipping the entire sheet as tokens on
@@ -63,18 +56,34 @@ async function decide({ query, products, vocabulary, previousFilters, history })
     `\nCandidate catalog (JSON):\n${JSON.stringify(candidates)}`,
   ].join('\n');
 
-  const response = await getClient().messages.create({
-    model: MODEL,
-    max_tokens: 500,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: userMessage }],
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.openaiApiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,
+      max_tokens: 500,
+    }),
   });
 
-  const textBlock = response.content.find((b) => b.type === 'text');
-  if (!textBlock) throw new Error('LLM returned no text content');
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    throw new Error(`OpenAI API error ${response.status}: ${errBody.slice(0, 300)}`);
+  }
 
-  const cleaned = textBlock.text.replace(/```json|```/g, '').trim();
-  const parsed = JSON.parse(cleaned);
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('OpenAI returned no message content');
+
+  const parsed = JSON.parse(content);
 
   if (parsed.action === 'clarify') {
     return { action: 'clarify', question: parsed.question, filters: previousFilters || {} };

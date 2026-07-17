@@ -8,7 +8,7 @@ module.exports = {
     range: process.env.GOOGLE_SHEET_RANGE || 'Sheet1',
   },
   catalogRefreshMs: parseInt(process.env.CATALOG_REFRESH_MS || '300000', 10),
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
   sessionTtlMs: parseInt(process.env.SESSION_TTL_MS || '900000', 10),
   maxRecommendations: 3,
 };

@@ -2,7 +2,7 @@ const config = require('../config');
 const ruleEngine = require('./ruleEngine');
 const llmEngine = require('./llmEngine');
 
-const hasLlm = Boolean(config.anthropicApiKey);
+const hasLlm = Boolean(config.openaiApiKey);
 
 /**
  * Runs the recommendation decision. Uses the LLM engine automatically when

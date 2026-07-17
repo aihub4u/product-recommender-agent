@@ -8,12 +8,12 @@ switch between the two.
 
 ## How it decides
 
-- **No `ANTHROPIC_API_KEY` set** → rule-based engine. Extracts price ranges,
+- **No `OPENAI_API_KEY` set** → rule-based engine. Extracts price ranges,
   category/tag matches (built dynamically from your sheet's own values), and
   keywords from the query. Asks a clarifying question if the query has no
   usable signal, matches nothing, or matches too many products ambiguously.
-- **`ANTHROPIC_API_KEY` set** → Claude-backed engine. Sends the conversation
-  history plus a relevance-prefiltered slice of your catalog to Claude, which
+- **`OPENAI_API_KEY` set** → OpenAI-backed engine. Sends the conversation
+  history plus a relevance-prefiltered slice of your catalog to OpenAI, which
   returns structured JSON deciding whether to ask a question or recommend.
   If the LLM call fails for any reason, the API automatically falls back to
   the rule engine rather than erroring out.
@@ -36,7 +36,7 @@ Either way, the response shape to your client is identical.
    ```bash
    cp .env.example .env
    # fill in GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_KEY_PATH
-   # optionally set ANTHROPIC_API_KEY to enable the LLM engine
+   # optionally set OPENAI_API_KEY to enable the LLM engine
    ```
 
 3. **Install & run**

@@ -15,7 +15,7 @@ app.use('/api', recommendRoutes);
 
 app.listen(config.port, () => {
   console.log(`Product recommendation agent listening on port ${config.port}`);
-  console.log(`Engine mode: ${engine.engineInUse.toUpperCase()}${engine.engineInUse === 'rule' ? ' (set ANTHROPIC_API_KEY to switch to LLM mode)' : ''}`);
+  console.log(`Engine mode: ${engine.engineInUse.toUpperCase()}${engine.engineInUse === 'rule' ? ' (set OPENAI_API_KEY to switch to LLM mode)' : ''}`);
   productStore.startAutoRefresh();
   sessionStore.startSweeper();
 });
