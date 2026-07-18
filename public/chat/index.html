@@ -390,17 +390,9 @@
     if (typingRow) { typingRow.remove(); typingRow = null; }
   }
 
-  function greet() {
-    addBubble({
-      sender: 'bot',
-      text: "Hi! 👋 I'm this store's shopping assistant. Tell me what you're looking for — e.g. \"something for a wedding under 5000\" — and I'll find up to a few picks for you."
-    });
-  }
-
   function resetChat() {
     sessionId = null;
     chatArea.innerHTML = '<div class="date-chip">Today</div>';
-    greet();
   }
 
   async function sendMessage() {
@@ -470,8 +462,6 @@
     apiBase = apiUrlInput.value.trim().replace(/\/$/, '');
     modalOverlay.classList.remove('show');
   });
-
-  greet();
 })();
 </script>
 
