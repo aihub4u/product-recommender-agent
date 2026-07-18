@@ -1,4 +1,5 @@
 const ruleEngine = require('./ruleEngine');
+const { callProvider, parseModelJson } = require('./providers');
 
 function buildCandidateList(query, products, vocabulary, previousFilters) {
   const filters = ruleEngine.extractFilters(query, vocabulary, previousFilters);
@@ -60,69 +61,6 @@ function buildUserMessage(query, history, candidates) {
   ].join('\n');
 }
 
-function parseModelJson(rawText) {
-  const cleaned = rawText.replace(/```json|```/g, '').trim();
-  return JSON.parse(cleaned);
-}
-
-async function callOpenAI({ apiKey, model, systemPrompt, userMessage }) {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: model || 'gpt-5.4-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-      max_completion_tokens: 500,
-    }),
-  });
-  if (!response.ok) {
-    const errBody = await response.text().catch(() => '');
-    throw new Error(`OpenAI API error ${response.status}: ${errBody.slice(0, 300)}`);
-  }
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('OpenAI returned no message content');
-  const usage = {
-    inputTokens: data.usage?.prompt_tokens || 0,
-    outputTokens: data.usage?.completion_tokens || 0,
-  };
-  return { parsed: parseModelJson(content), usage };
-}
-
-async function callAnthropic({ apiKey, model, systemPrompt, userMessage }) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: model || 'claude-sonnet-5',
-      max_tokens: 500,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMessage }],
-    }),
-  });
-  if (!response.ok) {
-    const errBody = await response.text().catch(() => '');
-    throw new Error(`Anthropic API error ${response.status}: ${errBody.slice(0, 300)}`);
-  }
-  const data = await response.json();
-  const textBlock = (data.content || []).find((b) => b.type === 'text');
-  if (!textBlock) throw new Error('Anthropic returned no text content');
-  const usage = {
-    inputTokens: data.usage?.input_tokens || 0,
-    outputTokens: data.usage?.output_tokens || 0,
-  };
-  return { parsed: parseModelJson(textBlock.text), usage };
-}
-
 async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '' }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
@@ -132,19 +70,11 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
   const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix);
   const userMessage = buildUserMessage(query, history, candidates);
 
-  let parsed;
-  let usage = { inputTokens: 0, outputTokens: 0 };
-  if (llmConfig.provider === 'openai') {
-    const result = await callOpenAI({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
-    parsed = result.parsed;
-    usage = result.usage;
-  } else if (llmConfig.provider === 'anthropic') {
-    const result = await callAnthropic({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
-    parsed = result.parsed;
-    usage = result.usage;
-  } else {
-    throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
-  }
+  const { rawText, usage } = await callProvider({
+    provider: llmConfig.provider, apiKey: llmConfig.apiKey, model: llmConfig.model,
+    systemPrompt, userMessage, jsonMode: true,
+  });
+  const parsed = parseModelJson(rawText);
 
   if (parsed.action === 'clarify') {
     return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage };

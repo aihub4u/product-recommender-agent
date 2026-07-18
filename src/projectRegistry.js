@@ -91,6 +91,8 @@ async function loadProjectIntoCache(projectRow) {
     id: projectRow.id,
     name: projectRow.name,
     slug: projectRow.slug,
+    agentType: projectRow.agent_type || 'custom',
+    hasDataSource: projectRow.has_data_source !== false,
     sheetConfig: rowToSheetConfig(sheetRes.rows[0]),
     llmConfig: rowToLlmConfig(llmRes.rows[0]),
     guardrails: rowToGuardrails(guardrailsRes.rows[0]),
@@ -121,6 +123,8 @@ function listProjects() {
     id: p.id,
     name: p.name,
     slug: p.slug,
+    agentType: p.agentType,
+    hasDataSource: p.hasDataSource,
     productsLoaded: p.products.length,
     engine: p.llmConfig.provider !== 'none' && p.llmConfig.apiKeyEnc ? p.llmConfig.provider : 'rule',
     lastRefreshed: p.lastRefreshed,
@@ -129,11 +133,11 @@ function listProjects() {
   }));
 }
 
-async function createProject(name) {
+async function createProject(name, { agentType = 'custom', hasDataSource = true } = {}) {
   const slug = await uniqueSlug(slugify(name));
   const { rows } = await db.query(
-    'INSERT INTO projects (name, slug) VALUES ($1, $2) RETURNING *',
-    [name, slug]
+    'INSERT INTO projects (name, slug, agent_type, has_data_source) VALUES ($1, $2, $3, $4) RETURNING *',
+    [name, slug, agentType, hasDataSource]
   );
   const project = rows[0];
   await db.query('INSERT INTO project_sheet_config (project_id) VALUES ($1)', [project.id]);
@@ -153,6 +157,7 @@ async function deleteProject(slug) {
 async function updateSheetConfig(slug, { sheetId, range, catalogRefreshMs, serviceAccountJson, clearServiceAccount }) {
   const entry = getProject(slug);
   if (!entry) throw new Error('Project not found');
+  if (!entry.hasDataSource) throw new Error('This project is not configured to use a data source.');
 
   const fields = [];
   const values = [];
@@ -239,6 +244,7 @@ async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPri
 async function refreshCatalog(slug) {
   const entry = getProject(slug);
   if (!entry) throw new Error('Project not found');
+  if (!entry.hasDataSource) throw new Error('This project is not configured to use a data source.');
   if (!entry.sheetConfig.sheetId) {
     entry.lastRefreshError = 'No Google Sheet ID configured yet.';
     return entry;

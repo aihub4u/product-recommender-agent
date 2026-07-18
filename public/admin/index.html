@@ -3,161 +3,253 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Karix Agent Platform — Admin</title>
+<title>Karix Agent Platform — Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
-    /* Karix-inspired palette: deep navy, violet accent, cyan highlight */
-    --navy-950: #070c1a;
+    /* ---- Signal network token system ---- */
+    --void: #050914;
+    --navy-950: #070c1e;
     --navy-900: #0b1330;
-    --navy-800: #121c42;
-    --navy-700: #1a2657;
-    --navy-line: #23305f;
-    --ink: #10162b;
-    --ink-soft: #5b647c;
-    --line: #e3e6ef;
-    --bg: #f5f6fb;
-    --panel: #ffffff;
+    --navy-800: #101b3d;
+    --navy-700: #172352;
+    --glass-line: rgba(140, 155, 255, 0.14);
+    --glass-line-strong: rgba(140, 155, 255, 0.28);
+    --ink: #eaf0ff;
+    --ink-soft: #8b93bd;
+    --ink-faint: #5c6390;
     --violet: #7c5cff;
-    --violet-hover: #6a48f2;
-    --violet-soft: #efeaff;
+    --violet-bright: #9b82ff;
     --cyan: #22d3ee;
-    --cyan-soft: #e6fbff;
-    --green: #16a34a;
-    --red: #dc2626;
-    --amber: #d97706;
-    --radius: 10px;
+    --cyan-bright: #6ee9fb;
+    --magenta: #ff5ca8;
+    --green: #34e0a1;
+    --amber: #ffb954;
+    --red: #ff6b7a;
+    --radius: 14px;
+    --font-display: 'Space Grotesk', -apple-system, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Consolas, monospace;
+    --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
   * { box-sizing: border-box; }
+  html { color-scheme: dark; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    font-size: 14px;
+    margin: 0; min-height: 100vh; color: var(--ink);
+    font-family: var(--font-body);
+    font-size: clamp(13px, 0.9vw + 8px, 14.5px);
+    background: var(--void);
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,92,255,0.16), transparent 60%),
+      radial-gradient(ellipse 700px 500px at 100% 10%, rgba(34,211,238,0.10), transparent 55%),
+      linear-gradient(var(--glass-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--glass-line) 1px, transparent 1px);
+    background-size: auto, auto, 42px 42px, 42px 42px;
+    background-attachment: fixed;
   }
-  a { color: var(--violet); text-decoration: none; }
+  ::selection { background: rgba(124,92,255,0.35); }
+  a { color: var(--cyan-bright); text-decoration: none; }
   button { font-family: inherit; cursor: pointer; }
+  h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; }
   input, textarea, select {
-    font-family: inherit; font-size: 13.5px; padding: 8px 10px;
-    border: 1px solid var(--line); border-radius: 8px; width: 100%; outline: none;
-    background: #fff; color: var(--ink);
+    font-family: var(--font-body); font-size: 13.5px; padding: 9px 11px;
+    border: 1px solid var(--glass-line-strong); border-radius: 9px; width: 100%; outline: none;
+    background: rgba(10,16,38,0.6); color: var(--ink);
   }
-  input:focus, textarea:focus, select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--violet-soft); }
-  label { font-size: 12px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 5px; }
+  input::placeholder, textarea::placeholder { color: var(--ink-faint); }
+  input:focus, textarea:focus, select:focus { border-color: var(--violet-bright); box-shadow: 0 0 0 3px rgba(124,92,255,0.18); }
+  label { font-size: 11.5px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
   .field { margin-bottom: 14px; }
-  .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
+  .hint { font-size: 11.5px; color: var(--ink-faint); margin-top: 5px; line-height: 1.5; }
+  .mono { font-family: var(--font-mono); }
+
   .btn {
-    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
-    border-radius: 8px; border: 1px solid transparent; font-weight: 600; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px;
+    border-radius: 9px; border: 1px solid transparent; font-weight: 600; font-size: 13px;
+    transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.15s ease;
   }
-  .btn-primary { background: var(--violet); color: #fff; }
-  .btn-primary:hover { background: var(--violet-hover); }
-  .btn-secondary { background: #fff; border-color: var(--line); color: var(--ink); }
-  .btn-secondary:hover { background: #f3f4f8; }
-  .btn-danger { background: #fff; border-color: #fca5a5; color: var(--red); }
-  .btn-danger:hover { background: #fef2f2; }
-  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: linear-gradient(135deg, var(--violet), #6a48f2); color: #fff; box-shadow: 0 4px 20px rgba(124,92,255,0.35); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 26px rgba(124,92,255,0.5); }
+  .btn-secondary { background: rgba(255,255,255,0.04); border-color: var(--glass-line-strong); color: var(--ink); }
+  .btn-secondary:hover { background: rgba(255,255,255,0.08); border-color: var(--violet-bright); }
+  .btn-danger { background: rgba(255,107,122,0.08); border-color: rgba(255,107,122,0.4); color: var(--red); }
+  .btn-danger:hover { background: rgba(255,107,122,0.16); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-ghost { background: transparent; border: none; color: var(--ink-soft); padding: 6px 10px; }
+  .btn-ghost:hover { color: var(--ink); }
 
   #app { display: none; }
-  #loginScreen {
-    min-height: 100vh; display: flex; align-items: center; justify-content: center;
-    background: radial-gradient(circle at 20% 20%, #14205a 0%, var(--navy-950) 55%);
-  }
+  #loginScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .login-card {
-    background: var(--panel); border-radius: 16px;
-    padding: 38px 34px; width: 350px; box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    background: linear-gradient(180deg, rgba(16,27,61,0.85), rgba(11,19,48,0.85));
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-line-strong); border-radius: 18px;
+    padding: 40px 36px; width: min(360px, 92vw);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,92,255,0.06) inset;
   }
-  .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
-  .login-brand-badge {
-    width: 34px; height: 34px; border-radius: 9px;
+  .login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .brand-badge {
+    width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
     background: linear-gradient(135deg, var(--violet), var(--cyan));
-    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-family: var(--font-display); font-size: 15px;
+    box-shadow: 0 0 24px rgba(124,92,255,0.5);
   }
-  .login-card h1 { font-size: 17px; margin: 0; }
-  .login-card p { font-size: 12.5px; color: var(--ink-soft); margin: 4px 0 22px; }
-  .error-text { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+  .login-card h1 { font-size: 18px; margin: 0; color: #fff; }
+  .login-card .sub { font-size: 10.5px; color: var(--cyan-bright); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+  .login-card p { font-size: 12.5px; color: var(--ink-soft); margin: 4px 0 24px; }
+  .error-text { color: var(--red); font-size: 12.5px; margin-top: 10px; min-height: 16px; }
 
   .layout { display: flex; min-height: 100vh; }
   .sidebar {
-    width: 264px; flex-shrink: 0; background: var(--navy-950); color: #cfd4e6;
-    display: flex; flex-direction: column; padding: 18px 14px;
-    background-image: radial-gradient(circle at 100% 0%, rgba(124,92,255,0.18), transparent 45%);
+    width: clamp(220px, 16vw, 280px); flex-shrink: 0;
+    background: linear-gradient(180deg, rgba(7,12,30,0.9), rgba(5,9,20,0.95));
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--glass-line);
+    display: flex; flex-direction: column; padding: 20px 14px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
   }
-  .brand { font-weight: 700; font-size: 14.5px; padding: 4px 8px 18px; display: flex; align-items: center; gap: 9px; color: #fff; }
-  .brand-badge {
-    width: 28px; height: 28px; border-radius: 8px;
-    background: linear-gradient(135deg, var(--violet), var(--cyan));
-    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
-  }
-  .brand-sub { font-size: 10.5px; color: #7c85a8; font-weight: 500; margin-top: 1px; }
+  .brand { font-weight: 700; font-family: var(--font-display); font-size: 14.5px; padding: 4px 8px 4px; display: flex; align-items: center; gap: 10px; color: #fff; }
+  .brand-sub { font-size: 10px; color: var(--ink-faint); font-weight: 500; margin-top: 2px; letter-spacing: 0.03em; }
 
-  .nav-section-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #6a7396; font-weight: 700; padding: 14px 10px 6px; }
-  .project-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .pulse-strip { margin: 16px 6px 6px; height: 34px; opacity: 0.9; }
+  .pulse-strip svg { width: 100%; height: 100%; overflow: visible; }
+  .pulse-line { fill: none; stroke: url(#pulseGrad); stroke-width: 1.6; filter: drop-shadow(0 0 4px rgba(124,92,255,0.6)); }
+  @keyframes pulse-flow { to { stroke-dashoffset: -240; } }
+  .pulse-line { stroke-dasharray: 6 5; animation: pulse-flow 3.5s linear infinite; }
+
+  .nav-section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-faint); font-weight: 700; padding: 16px 10px 7px; }
+  .project-list { display: flex; flex-direction: column; gap: 2px; }
   .project-item, .nav-item {
-    padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13.3px; font-weight: 500;
-    display: flex; align-items: center; justify-content: space-between; color: #b7bedb;
+    padding: 9px 10px; border-radius: 9px; cursor: pointer; font-size: 13px; font-weight: 500;
+    display: flex; align-items: center; justify-content: space-between; color: var(--ink-soft);
+    border: 1px solid transparent; transition: all 0.15s ease;
   }
-  .project-item:hover, .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
-  .project-item.active, .nav-item.active { background: rgba(124,92,255,0.22); color: #fff; font-weight: 600; box-shadow: inset 2px 0 0 var(--violet); }
-  .nav-item svg { flex-shrink: 0; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .dot.green { background: #34d399; } .dot.amber { background: #fbbf24; } .dot.grey { background: #4b5578; }
+  .project-item span:first-child, .nav-item span:first-child { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .project-item:hover, .nav-item:hover { background: rgba(255,255,255,0.045); color: var(--ink); }
+  .project-item.active, .nav-item.active {
+    background: linear-gradient(90deg, rgba(124,92,255,0.18), rgba(124,92,255,0.04));
+    color: #fff; font-weight: 600; border-color: var(--glass-line-strong);
+  }
+  .nav-item svg { flex-shrink: 0; opacity: 0.8; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; position: relative; }
+  .dot.green { background: var(--green); box-shadow: 0 0 8px rgba(52,224,161,0.8); }
+  .dot.green::after { content:''; position:absolute; inset:-4px; border-radius:50%; border:1px solid var(--green); animation: dot-ring 2s ease-out infinite; }
+  .dot.amber { background: var(--amber); box-shadow: 0 0 8px rgba(255,185,84,0.7); }
+  .dot.grey { background: var(--ink-faint); }
+  @keyframes dot-ring { 0% { transform: scale(0.6); opacity: 0.8; } 100% { transform: scale(2.2); opacity: 0; } }
+
   .sidebar-spacer { flex: 1; }
-  .sidebar-footer { padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 10px; }
-  .sidebar-footer .btn-secondary { background: transparent; border-color: rgba(255,255,255,0.14); color: #cfd4e6; }
-  .sidebar-footer .btn-secondary:hover { background: rgba(255,255,255,0.06); }
+  .sidebar-footer { padding-top: 14px; border-top: 1px solid var(--glass-line); margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 
-  .main { flex: 1; padding: 28px 36px; max-width: 1000px; }
-  .empty-state { color: var(--ink-soft); padding: 60px 0; text-align: center; }
+  .main { flex: 1; padding: clamp(20px, 2.5vw, 40px) clamp(20px, 3.2vw, 48px); max-width: 1280px; width: 100%; margin: 0 auto; }
+  .empty-state { color: var(--ink-faint); padding: 90px 0; text-align: center; font-size: 13.5px; }
 
-  .project-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-  .project-header h1 { font-size: 21px; margin: 0; }
-  .slug-tag { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-soft); background: #f0f1f7; padding: 2px 7px; border-radius: 5px; }
-  .status-row { display: flex; gap: 8px; margin: 10px 0 22px; flex-wrap: wrap; }
-  .badge { font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; }
-  .badge-grey { background: #f0f1f5; color: var(--ink-soft); }
-  .badge-green { background: #ecfdf3; color: var(--green); }
-  .badge-red { background: #fef2f2; color: var(--red); }
-  .badge-violet { background: var(--violet-soft); color: var(--violet-hover); }
-  .badge-cyan { background: var(--cyan-soft); color: #0891b2; }
+  .project-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; gap: 12px; flex-wrap: wrap; }
+  .project-header h1 { font-size: clamp(19px, 1.6vw, 24px); margin: 0; color: #fff; }
+  .agent-type-tag { font-size: 10.5px; color: var(--violet-bright); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+  .slug-tag { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-faint); background: rgba(255,255,255,0.04); padding: 3px 8px; border-radius: 6px; border: 1px solid var(--glass-line); }
+  .status-row { display: flex; gap: 8px; margin: 12px 0 24px; flex-wrap: wrap; }
+  .badge { font-size: 11px; font-weight: 600; padding: 5px 11px; border-radius: 20px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid transparent; }
+  .badge-grey { background: rgba(255,255,255,0.05); color: var(--ink-soft); border-color: var(--glass-line); }
+  .badge-green { background: rgba(52,224,161,0.1); color: var(--green); border-color: rgba(52,224,161,0.25); }
+  .badge-red { background: rgba(255,107,122,0.1); color: var(--red); border-color: rgba(255,107,122,0.25); }
+  .badge-violet { background: rgba(124,92,255,0.14); color: var(--violet-bright); border-color: rgba(124,92,255,0.3); }
+  .badge-cyan { background: rgba(34,211,238,0.1); color: var(--cyan-bright); border-color: rgba(34,211,238,0.28); }
 
-  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
-  .tab { padding: 9px 4px; margin-right: 20px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; border-bottom: 2px solid transparent; }
-  .tab.active { color: var(--violet); border-bottom-color: var(--violet); }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--glass-line); margin-bottom: 26px; overflow-x: auto; }
+  .tab { padding: 10px 6px; margin-right: 22px; font-size: 13.5px; font-weight: 600; color: var(--ink-faint); cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: color 0.15s; }
+  .tab:hover { color: var(--ink-soft); }
+  .tab.active { color: #fff; border-bottom-color: var(--violet-bright); }
 
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
-  .card h3 { font-size: 13.5px; margin: 0 0 14px; }
-  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
-  .save-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .card {
+    background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0.01));
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 22px;
+    margin-bottom: 18px;
+  }
+  .card h3 { font-size: 13px; margin: 0 0 16px; color: #fff; text-transform: uppercase; letter-spacing: 0.04em; }
+  .row-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+  .row-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
+  .save-row { display: flex; align-items: center; gap: 12px; margin-top: 6px; flex-wrap: wrap; }
   .save-msg { font-size: 12px; color: var(--green); }
-  textarea { resize: vertical; min-height: 70px; }
+  textarea { resize: vertical; min-height: 76px; }
 
-  .deploy-box { background: var(--navy-950); color: #d7dcf5; border-radius: 8px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 8px; word-break: break-all; }
-  .deploy-label { font-size: 11px; color: var(--ink-soft); margin: 12px 0 4px; font-weight: 600; }
+  .deploy-box {
+    background: var(--void); color: var(--cyan-bright); border: 1px solid var(--glass-line-strong); border-radius: 9px;
+    padding: 13px 15px; font-family: var(--font-mono); font-size: 12px; margin-bottom: 10px; word-break: break-all;
+  }
+  .deploy-label { font-size: 11px; color: var(--ink-faint); margin: 14px 0 5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
   .chat-embed-wrap { display: flex; justify-content: center; padding: 10px 0 4px; }
-  .chat-embed-frame { width: 100%; max-width: 420px; height: 640px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(10,20,60,0.08); }
+  .chat-embed-frame { width: 100%; max-width: 420px; height: min(640px, 78vh); border: 1px solid var(--glass-line-strong); border-radius: 16px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(124,92,255,0.1); }
   .chat-embed-frame iframe { width: 100%; height: 100%; border: none; }
 
-  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
-  .stat-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
-  .stat-value { font-size: 22px; font-weight: 700; }
-  .stat-value.violet { color: var(--violet-hover); }
-  .stat-value.cyan { color: #0891b2; }
+  .stat-card { background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01)); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 18px 20px; backdrop-filter: blur(12px); }
+  .stat-label { font-size: 11px; color: var(--ink-faint); font-weight: 600; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value { font-size: clamp(22px, 2vw, 28px); font-weight: 700; font-family: var(--font-display); color: #fff; }
+  .stat-value.violet { color: var(--violet-bright); }
+  .stat-value.cyan { color: var(--cyan-bright); }
 
-  table.usage-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  table.usage-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid var(--line); }
-  table.usage-table td { padding: 10px 10px; border-bottom: 1px solid #f0f1f7; }
+  table.usage-table { width: 100%; border-collapse: collapse; font-size: 12.8px; }
+  table.usage-table th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-faint); padding: 9px 10px; border-bottom: 1px solid var(--glass-line); font-weight: 600; }
+  table.usage-table td { padding: 11px 10px; border-bottom: 1px solid rgba(255,255,255,0.03); font-family: var(--font-mono); color: var(--ink); }
+  table.usage-table td.name-cell { font-family: var(--font-body); font-weight: 600; }
   table.usage-table tr:last-child td { border-bottom: none; }
-  .provider-pill { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; }
-  .provider-pill.openai { background: var(--cyan-soft); color: #0891b2; }
-  .provider-pill.anthropic { background: var(--violet-soft); color: var(--violet-hover); }
-  .provider-pill.rule { background: #f0f1f5; color: var(--ink-soft); }
+  table.usage-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .provider-pill { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.03em; }
+  .provider-pill.openai { background: rgba(34,211,238,0.12); color: var(--cyan-bright); }
+  .provider-pill.anthropic { background: rgba(124,92,255,0.16); color: var(--violet-bright); }
+  .provider-pill.rule, .provider-pill.none { background: rgba(255,255,255,0.05); color: var(--ink-faint); }
 
-  .modal-overlay { position: fixed; inset: 0; background: rgba(7,12,26,0.55); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding: 10px 4px 0; margin-bottom: 4px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
+  .bar-fill { width: 100%; border-radius: 5px 5px 2px 2px; background: linear-gradient(180deg, var(--cyan), var(--violet)); box-shadow: 0 0 14px rgba(124,92,255,0.35); min-height: 3px; }
+  .bar-date { font-size: 9.5px; color: var(--ink-faint); font-family: var(--font-mono); white-space: nowrap; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(3,6,16,0.72); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; z-index: 50; padding: 20px; }
   .modal-overlay.show { display: flex; }
-  .modal-card { background: #fff; border-radius: 12px; padding: 20px; width: 340px; }
-  .modal-card h3 { margin: 0 0 14px; font-size: 15px; }
-  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  .modal-card {
+    background: linear-gradient(180deg, rgba(16,27,61,0.95), rgba(11,19,48,0.95));
+    backdrop-filter: blur(20px); border: 1px solid var(--glass-line-strong); border-radius: 18px;
+    padding: 26px; width: min(560px, 94vw); max-height: 88vh; overflow-y: auto;
+    box-shadow: 0 30px 90px rgba(0,0,0,0.6);
+  }
+  .modal-card.wide { width: min(720px, 94vw); }
+  .modal-card h3 { margin: 0 0 4px; font-size: 17px; color: #fff; }
+  .modal-step-label { font-size: 10.5px; color: var(--cyan-bright); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  .type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 10px; margin: 18px 0; }
+  .type-card {
+    border: 1px solid var(--glass-line); border-radius: 12px; padding: 14px; cursor: pointer;
+    background: rgba(255,255,255,0.02); transition: all 0.15s ease;
+  }
+  .type-card:hover { border-color: var(--glass-line-strong); background: rgba(255,255,255,0.04); }
+  .type-card.selected { border-color: var(--violet-bright); background: rgba(124,92,255,0.1); box-shadow: 0 0 0 1px var(--violet-bright), 0 0 20px rgba(124,92,255,0.25); }
+  .type-card-label { font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 4px; }
+  .type-card-cat { font-size: 10px; color: var(--cyan-bright); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; margin-bottom: 6px; }
+  .type-card-desc { font-size: 11.5px; color: var(--ink-soft); line-height: 1.45; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 16px; border: 1px solid var(--glass-line); border-radius: 10px; background: rgba(255,255,255,0.02); }
+  .toggle-row .label-text { font-size: 13px; font-weight: 600; color: #fff; }
+  .toggle-row .label-sub { font-size: 11.5px; color: var(--ink-faint); margin-top: 2px; }
+  .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch-track { position: absolute; inset: 0; background: rgba(255,255,255,0.12); border-radius: 20px; cursor: pointer; transition: background 0.2s; }
+  .switch-track::before { content:''; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition: transform 0.2s; }
+  .switch input:checked + .switch-track { background: linear-gradient(135deg, var(--violet), var(--cyan)); }
+  .switch input:checked + .switch-track::before { transform: translateX(20px); }
+
+  @media (max-width: 860px) {
+    .layout { flex-direction: column; }
+    .sidebar { width: 100%; height: auto; position: relative; flex-direction: row; align-items: center; overflow-x: auto; padding: 12px; gap: 10px; }
+    .sidebar .brand { padding: 0; }
+    .pulse-strip, .sidebar-spacer, .nav-section-label { display: none; }
+    .project-list { flex-direction: row; }
+    .sidebar-footer { flex-direction: row; border: none; padding: 0; margin: 0 0 0 auto; }
+    .main { padding: 20px 16px; }
+  }
 </style>
 </head>
 <body>
@@ -165,13 +257,13 @@
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-brand">
-      <div class="login-brand-badge">K</div>
+      <div class="brand-badge">K</div>
       <div>
-        <div style="font-weight:700; font-size:14px;">Karix Agent Platform</div>
-        <div style="font-size:10.5px; color:var(--ink-soft);">a Tanla company</div>
+        <h1>Agent Platform</h1>
+        <div class="sub">Karix · a Tanla company</div>
       </div>
     </div>
-    <p>Sign in to manage product recommendation agents.</p>
+    <p>Sign in to the console.</p>
     <div class="field">
       <label>Admin password</label>
       <input type="password" id="loginPassword" placeholder="••••••••" />
@@ -188,51 +280,84 @@
         <div class="brand-badge">K</div>
         <div>
           Agent Platform
-          <div class="brand-sub">a Tanla company</div>
+          <div class="brand-sub">Karix · a Tanla company</div>
         </div>
+      </div>
+
+      <div class="pulse-strip">
+        <svg viewBox="0 0 260 34" preserveAspectRatio="none">
+          <defs>
+            <linearGradient id="pulseGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stop-color="#22d3ee"/>
+              <stop offset="50%" stop-color="#7c5cff"/>
+              <stop offset="100%" stop-color="#ff5ca8"/>
+            </linearGradient>
+          </defs>
+          <path class="pulse-line" d="M0,17 L30,17 L38,4 L46,30 L54,17 L90,17 L98,10 L106,24 L114,17 L150,17 L158,2 L166,32 L174,17 L210,17 L218,8 L226,26 L234,17 L260,17"/>
+        </svg>
       </div>
 
       <div class="nav-section-label">Overview</div>
       <div class="nav-item" id="navUsage">
-        <span style="display:flex; align-items:center; gap:8px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
-          Usage &amp; Costs
-        </span>
+        <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>Usage &amp; Costs</span>
       </div>
 
-      <div class="nav-section-label">Projects</div>
+      <div class="nav-section-label">Agents</div>
       <div class="project-list" id="projectList"></div>
 
       <div class="sidebar-spacer"></div>
       <div class="sidebar-footer">
-        <button class="btn btn-secondary" id="newProjectBtn" style="width:100%; justify-content:center;">+ New Project</button>
-        <button class="btn btn-secondary" id="logoutBtn" style="width:100%; justify-content:center; margin-top:8px;">Log out</button>
+        <button class="btn btn-primary" id="newProjectBtn" style="width:100%; justify-content:center;">+ New Agent</button>
+        <button class="btn btn-ghost" id="logoutBtn" style="width:100%; justify-content:center;">Log out</button>
       </div>
     </div>
     <div class="main" id="main">
-      <div class="empty-state">Select a project, or create a new one.</div>
+      <div class="empty-state">Select an agent, or create a new one.</div>
     </div>
   </div>
 </div>
 
 <div class="modal-overlay" id="newProjectModal">
-  <div class="modal-card">
-    <h3>New project</h3>
-    <div class="field">
-      <label>Project name</label>
-      <input id="newProjectName" placeholder="e.g. Manyavar Store" />
+  <div class="modal-card wide">
+    <div id="wizardStep1">
+      <div class="modal-step-label">Step 1 of 2</div>
+      <h3>What kind of agent is this?</h3>
+      <p class="hint">Suggested starting points, based on common CPaaS use cases — pick one or go custom. Each pre-fills a sensible base behavior you can fully edit later.</p>
+      <div class="type-grid" id="typeGrid"><div class="hint">Loading suggestions…</div></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="cancelNewProject">Cancel</button>
+        <button class="btn btn-primary" id="toStep2" disabled>Continue</button>
+      </div>
     </div>
-    <div class="modal-actions">
-      <button class="btn btn-secondary" id="cancelNewProject">Cancel</button>
-      <button class="btn btn-primary" id="confirmNewProject">Create</button>
+    <div id="wizardStep2" style="display:none;">
+      <div class="modal-step-label">Step 2 of 2</div>
+      <h3>Name it &amp; connect data</h3>
+      <div class="field" style="margin-top:16px;">
+        <label>Agent name</label>
+        <input id="newProjectName" placeholder="e.g. Manyavar Store, Support Bot, Loan EMI Reminder" />
+      </div>
+      <div class="toggle-row">
+        <div>
+          <div class="label-text">Connect a data source</div>
+          <div class="label-sub">Turn on if this agent should answer from a Google Sheet (e.g. a product catalog). Leave off for a pure conversational agent driven by instructions.</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="hasDataSourceToggle" />
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="backToStep1">Back</button>
+        <button class="btn btn-primary" id="confirmNewProject">Create agent</button>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="modal-overlay" id="deleteModal">
   <div class="modal-card">
-    <h3>Delete this project?</h3>
-    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 6px;">This permanently removes its config, sheet link, stored keys, and usage history. This can't be undone.</p>
+    <h3>Delete this agent?</h3>
+    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 6px;">This permanently removes its config, data source link, stored keys, and usage history. This can't be undone.</p>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="cancelDelete">Cancel</button>
       <button class="btn btn-danger" id="confirmDelete">Delete</button>
@@ -244,10 +369,12 @@
 (function () {
   const API = '/api/admin';
   let projects = [];
+  let agentTypes = [];
   let currentSlug = null;
-  let currentView = 'usage'; // 'usage' | 'project'
-  let currentTab = 'sheet';
+  let currentView = 'usage';
+  let currentTab = null;
   let currentDetail = null;
+  let wizardSelectedType = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -271,8 +398,15 @@
     return v < 0.01 && v > 0 ? '<$0.01' : '$' + v.toFixed(2);
   }
   function fmtInt(n) { return Number(n || 0).toLocaleString('en-IN'); }
+  function fmtDateTime(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) + ' · ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  }
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  }
 
-  // ---- Auth ----
   async function checkAuth() {
     try { await api('/me'); showApp(); } catch (e) { showLogin(); }
   }
@@ -289,10 +423,8 @@
   $('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
   $('logoutBtn').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); showLogin(); });
 
-  // ---- Sidebar nav ----
   $('navUsage').addEventListener('click', () => { currentView = 'usage'; currentSlug = null; renderProjectList(); renderUsageView(); });
 
-  // ---- Projects list ----
   async function loadProjects() {
     const data = await api('/projects');
     projects = data.projects;
@@ -311,125 +443,158 @@
     projects.forEach((p) => {
       const item = document.createElement('div');
       item.className = 'project-item' + (currentView === 'project' && p.slug === currentSlug ? ' active' : '');
-      const dotClass = p.lastRefreshError ? 'amber' : (p.productsLoaded > 0 ? 'green' : 'grey');
-      item.innerHTML = `<span>${escapeHtml(p.name)}</span><span class="dot ${dotClass}"></span>`;
+      const dotClass = p.lastRefreshError ? 'amber' : ((!p.hasDataSource || p.productsLoaded > 0) ? 'green' : 'grey');
+      item.innerHTML = '<span>' + escapeHtml(p.name) + '</span><span class="dot ' + dotClass + '"></span>';
       item.addEventListener('click', () => selectProject(p.slug));
       list.appendChild(item);
     });
     if (projects.length === 0) {
-      list.innerHTML = '<div style="font-size:12px; color:#6a7396; padding:8px 10px;">No projects yet.</div>';
+      list.innerHTML = '<div style="font-size:12px; color:var(--ink-faint); padding:8px 10px;">No agents yet.</div>';
     }
   }
 
   async function selectProject(slug) {
     currentView = 'project';
     currentSlug = slug;
-    currentTab = 'sheet';
+    currentTab = null;
     renderProjectList();
-    const detail = await api(`/projects/${slug}`);
+    const detail = await api('/projects/' + slug);
     currentDetail = detail;
+    currentTab = detail.hasDataSource ? 'sheet' : 'llm';
     renderMain(detail);
   }
 
-  // ---- New project ----
-  $('newProjectBtn').addEventListener('click', () => { $('newProjectName').value = ''; $('newProjectModal').classList.add('show'); });
+  async function openWizard() {
+    wizardSelectedType = null;
+    $('newProjectName').value = '';
+    $('hasDataSourceToggle').checked = false;
+    $('wizardStep1').style.display = 'block';
+    $('wizardStep2').style.display = 'none';
+    $('toStep2').disabled = true;
+    $('newProjectModal').classList.add('show');
+    if (agentTypes.length === 0) {
+      try {
+        const data = await api('/agent-types');
+        agentTypes = data.agentTypes;
+      } catch (e) { $('typeGrid').innerHTML = '<div class="hint">Couldn\'t load suggestions: ' + escapeHtml(e.message) + '</div>'; return; }
+    }
+    renderTypeGrid();
+  }
+
+  function renderTypeGrid() {
+    $('typeGrid').innerHTML = agentTypes.map((t) => (
+      '<div class="type-card' + (wizardSelectedType === t.id ? ' selected' : '') + '" data-type="' + t.id + '">' +
+        '<div class="type-card-cat">' + escapeHtml(t.category) + '</div>' +
+        '<div class="type-card-label">' + escapeHtml(t.label) + '</div>' +
+        '<div class="type-card-desc">' + escapeHtml(t.description) + '</div>' +
+      '</div>'
+    )).join('');
+    document.querySelectorAll('.type-card').forEach((el) => {
+      el.addEventListener('click', () => {
+        wizardSelectedType = el.dataset.type;
+        renderTypeGrid();
+        $('toStep2').disabled = false;
+      });
+    });
+  }
+
+  $('newProjectBtn').addEventListener('click', openWizard);
   $('cancelNewProject').addEventListener('click', () => $('newProjectModal').classList.remove('show'));
+  $('toStep2').addEventListener('click', () => {
+    const type = agentTypes.find((t) => t.id === wizardSelectedType);
+    $('hasDataSourceToggle').checked = !!(type && type.suggestedHasDataSource);
+    $('wizardStep1').style.display = 'none';
+    $('wizardStep2').style.display = 'block';
+  });
+  $('backToStep1').addEventListener('click', () => {
+    $('wizardStep1').style.display = 'block';
+    $('wizardStep2').style.display = 'none';
+  });
   $('confirmNewProject').addEventListener('click', async () => {
     const name = $('newProjectName').value.trim();
     if (!name) return;
-    const { project } = await api('/projects', { method: 'POST', body: { name } });
+    const res = await api('/projects', {
+      method: 'POST',
+      body: { name: name, agentType: wizardSelectedType, hasDataSource: $('hasDataSourceToggle').checked },
+    });
     $('newProjectModal').classList.remove('show');
     await loadProjects();
-    selectProject(project.slug);
+    selectProject(res.project.slug);
   });
 
-  // ---- Delete project ----
   function confirmDeleteProject() { $('deleteModal').classList.add('show'); }
   $('cancelDelete').addEventListener('click', () => $('deleteModal').classList.remove('show'));
   $('confirmDelete').addEventListener('click', async () => {
-    await api(`/projects/${currentSlug}`, { method: 'DELETE' });
+    await api('/projects/' + currentSlug, { method: 'DELETE' });
     $('deleteModal').classList.remove('show');
     currentSlug = null;
     currentView = 'usage';
     await loadProjects();
   });
 
-  // ---- Global Usage & Costs view ----
   async function renderUsageView() {
-    $('main').innerHTML = `<div class="empty-state">Loading usage…</div>`;
+    $('main').innerHTML = '<div class="empty-state">Loading usage…</div>';
     let data;
-    try {
-      data = await api('/usage?days=30');
-    } catch (e) {
-      $('main').innerHTML = `<div class="empty-state">Couldn't load usage data: ${escapeHtml(e.message)}</div>`;
-      return;
-    }
-    if (currentView !== 'usage') return; // user navigated away while loading
+    try { data = await api('/usage?days=30'); }
+    catch (e) { $('main').innerHTML = '<div class="empty-state">Couldn\'t load usage data: ' + escapeHtml(e.message) + '</div>'; return; }
+    if (currentView !== 'usage') return;
 
     const totalCost = data.byProject.reduce((s, p) => s + (Number(p.cost_usd) || 0), 0);
     const totalRequests = data.byProject.reduce((s, p) => s + (Number(p.request_count) || 0), 0);
     const totalInput = data.byProject.reduce((s, p) => s + (Number(p.input_tokens) || 0), 0);
     const totalOutput = data.byProject.reduce((s, p) => s + (Number(p.output_tokens) || 0), 0);
 
-    const rows = data.byProject.map((p) => `
-      <tr>
-        <td><a href="#" data-slug="${p.slug}" class="usage-project-link" style="font-weight:600;">${escapeHtml(p.name)}</a></td>
-        <td>${fmtInt(p.request_count)}</td>
-        <td>${fmtInt(p.input_tokens)}</td>
-        <td>${fmtInt(p.output_tokens)}</td>
-        <td style="font-weight:600;">${fmtUsd(p.cost_usd)}</td>
-      </tr>
-    `).join('');
+    const rows = data.byProject.map((p) => (
+      '<tr><td class="name-cell"><a href="#" data-slug="' + p.slug + '" class="usage-project-link">' + escapeHtml(p.name) + '</a></td>' +
+      '<td>' + fmtInt(p.request_count) + '</td><td>' + fmtInt(p.input_tokens) + '</td><td>' + fmtInt(p.output_tokens) + '</td>' +
+      '<td style="color:var(--cyan-bright); font-weight:600;">' + fmtUsd(p.cost_usd) + '</td></tr>'
+    )).join('');
 
-    $('main').innerHTML = `
-      <div class="project-header"><h1>Usage &amp; Costs</h1></div>
-      <div class="hint" style="margin-bottom:20px;">LLM token usage and estimated spend across all projects, last 30 days. Costs are estimated from published per-token pricing — treat as budgeting guidance, not an exact bill.</div>
-
-      <div class="row-3" style="margin-bottom:20px;">
-        <div class="stat-card"><div class="stat-label">Total estimated cost</div><div class="stat-value violet">${fmtUsd(totalCost)}</div></div>
-        <div class="stat-card"><div class="stat-label">LLM requests</div><div class="stat-value">${fmtInt(totalRequests)}</div></div>
-        <div class="stat-card"><div class="stat-label">Total tokens</div><div class="stat-value cyan">${fmtInt(totalInput + totalOutput)}</div></div>
-      </div>
-
-      <div class="card">
-        <h3>By project</h3>
-        ${data.byProject.length === 0 ? '<div class="hint">No LLM usage recorded yet — usage appears here once a project with an LLM key configured handles a recommend request.</div>' : `
-        <table class="usage-table">
-          <thead><tr><th>Project</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Est. cost</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`}
-      </div>
-    `;
+    $('main').innerHTML =
+      '<div class="project-header"><h1>Usage &amp; Costs</h1></div>' +
+      '<div class="hint" style="margin-bottom:22px;">LLM token usage and estimated spend across every agent, last 30 days. Costs are estimated from published per-token pricing — treat as budgeting guidance, not an exact invoice match.</div>' +
+      '<div class="row-3" style="margin-bottom:22px;">' +
+        '<div class="stat-card"><div class="stat-label">Total estimated cost</div><div class="stat-value violet">' + fmtUsd(totalCost) + '</div></div>' +
+        '<div class="stat-card"><div class="stat-label">LLM requests</div><div class="stat-value">' + fmtInt(totalRequests) + '</div></div>' +
+        '<div class="stat-card"><div class="stat-label">Total tokens</div><div class="stat-value cyan">' + fmtInt(totalInput + totalOutput) + '</div></div>' +
+      '</div>' +
+      '<div class="card"><h3>By agent</h3>' +
+      (data.byProject.length === 0
+        ? '<div class="hint">No LLM usage recorded yet — usage appears here once an agent with an LLM key configured handles a request.</div>'
+        : '<table class="usage-table"><thead><tr><th>Agent</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Est. cost</th></tr></thead><tbody>' + rows + '</tbody></table>'
+      ) + '</div>';
 
     document.querySelectorAll('.usage-project-link').forEach((el) => {
       el.addEventListener('click', (e) => { e.preventDefault(); selectProject(el.dataset.slug); });
     });
   }
 
-  // ---- Main panel (project view) ----
   function renderMain(detail) {
     const engineBadge = detail.llm.provider !== 'none' && detail.llm.apiKeyMasked
-      ? `<span class="badge badge-violet">${detail.llm.provider}</span>`
-      : `<span class="badge badge-grey">rule engine</span>`;
-    const productsBadge = detail.productsLoaded > 0
-      ? `<span class="badge badge-green">${detail.productsLoaded} products loaded</span>`
-      : `<span class="badge badge-red">no products loaded</span>`;
-    const errorBadge = detail.lastRefreshError ? `<span class="badge badge-red">${escapeHtml(detail.lastRefreshError)}</span>` : '';
+      ? '<span class="badge badge-violet">' + detail.llm.provider + '</span>'
+      : '<span class="badge badge-grey">no LLM configured</span>';
 
-    $('main').innerHTML = `
-      <div class="project-header">
-        <h1>${escapeHtml(detail.name)}</h1>
-        <span class="slug-tag">${detail.slug}</span>
-      </div>
-      <div class="status-row">${productsBadge} ${engineBadge} ${errorBadge}</div>
-      <div class="tabs">
-        <div class="tab" data-tab="sheet">Sheet</div>
-        <div class="tab" data-tab="llm">LLM</div>
-        <div class="tab" data-tab="guardrails">Guardrails</div>
-        <div class="tab" data-tab="deploy">Test &amp; Deploy</div>
-      </div>
-      <div id="tabContent"></div>
-    `;
+    let sourceBadge;
+    if (!detail.hasDataSource) {
+      sourceBadge = '<span class="badge badge-cyan">conversational — no data source</span>';
+    } else if (detail.productsLoaded > 0) {
+      sourceBadge = '<span class="badge badge-green">' + detail.productsLoaded + ' items loaded</span>';
+    } else {
+      sourceBadge = '<span class="badge badge-red">no data loaded</span>';
+    }
+    const errorBadge = detail.lastRefreshError ? '<span class="badge badge-red">' + escapeHtml(detail.lastRefreshError) + '</span>' : '';
+    const typeLabel = (agentTypes.find(t => t.id === detail.agentType) || {}).label || detail.agentType || 'Custom';
+
+    const tabs = [];
+    if (detail.hasDataSource) tabs.push(['sheet', 'Data Source']);
+    tabs.push(['llm', 'LLM'], ['guardrails', 'Guardrails'], ['usage', 'Usage'], ['deploy', 'Test & Deploy']);
+
+    $('main').innerHTML =
+      '<div class="project-header"><div><div class="agent-type-tag">' + escapeHtml(typeLabel) + '</div><h1>' + escapeHtml(detail.name) + '</h1></div>' +
+      '<span class="slug-tag">' + detail.slug + '</span></div>' +
+      '<div class="status-row">' + sourceBadge + ' ' + engineBadge + ' ' + errorBadge + '</div>' +
+      '<div class="tabs">' + tabs.map(([id, label]) => '<div class="tab" data-tab="' + id + '">' + label + '</div>').join('') + '</div>' +
+      '<div id="tabContent"></div>';
 
     document.querySelectorAll('.tab').forEach((t) => {
       t.classList.toggle('active', t.dataset.tab === currentTab);
@@ -437,49 +602,30 @@
     });
 
     const content = $('tabContent');
-    if (currentTab === 'sheet') renderSheetTab(content, detail);
+    if (currentTab === 'sheet' && detail.hasDataSource) renderSheetTab(content, detail);
     else if (currentTab === 'llm') renderLlmTab(content, detail);
     else if (currentTab === 'guardrails') renderGuardrailsTab(content, detail);
+    else if (currentTab === 'usage') renderProjectUsageTab(content, detail);
     else renderDeployTab(content, detail);
   }
 
   function renderSheetTab(el, detail) {
-    el.innerHTML = `
-      <div class="card">
-        <h3>Google Sheet source</h3>
-        <div class="field">
-          <label>Google Sheet ID</label>
-          <input id="f_sheetId" value="${escapeHtml(detail.sheet.sheetId)}" placeholder="the long id from the sheet's URL" />
-        </div>
-        <div class="row-2">
-          <div class="field">
-            <label>Sheet / tab name</label>
-            <input id="f_range" value="${escapeHtml(detail.sheet.range)}" placeholder="Sheet1" />
-          </div>
-          <div class="field">
-            <label>Refresh interval (ms)</label>
-            <input id="f_refreshMs" type="number" value="${detail.sheet.catalogRefreshMs}" />
-          </div>
-        </div>
-        <div class="field">
-          <label>Service account JSON ${detail.sheet.hasCustomServiceAccount ? '(custom key saved — paste to replace)' : '(optional — leave blank to use the server default)'}</label>
-          <textarea id="f_serviceAccount" placeholder='{"type":"service_account", ...}'></textarea>
-          <div class="hint">Only needed if this project's sheet is shared with a different service account than the platform default.</div>
-        </div>
-        <div class="save-row">
-          <button class="btn btn-primary" id="saveSheet">Save sheet config</button>
-          <button class="btn btn-secondary" id="refreshCatalog">Refresh now</button>
-          <span class="save-msg" id="sheetMsg"></span>
-        </div>
-      </div>
-      <div class="card">
-        <h3>Danger zone</h3>
-        <button class="btn btn-danger" id="deleteProjectBtn">Delete this project</button>
-      </div>
-    `;
+    el.innerHTML =
+      '<div class="card"><h3>Google Sheet source</h3>' +
+      '<div class="field"><label>Google Sheet ID</label><input id="f_sheetId" value="' + escapeHtml(detail.sheet.sheetId) + '" placeholder="the long id from the sheet\'s URL" /></div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Sheet / tab name</label><input id="f_range" value="' + escapeHtml(detail.sheet.range) + '" placeholder="Sheet1" /></div>' +
+        '<div class="field"><label>Refresh interval (ms)</label><input id="f_refreshMs" type="number" value="' + detail.sheet.catalogRefreshMs + '" /></div>' +
+      '</div>' +
+      '<div class="field"><label>Service account JSON ' + (detail.sheet.hasCustomServiceAccount ? '(custom key saved — paste to replace)' : '(optional — leave blank to use the server default)') + '</label>' +
+      '<textarea id="f_serviceAccount" placeholder=\'{"type":"service_account", ...}\'></textarea>' +
+      '<div class="hint">Only needed if this agent\'s sheet is shared with a different service account than the platform default.</div></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="saveSheet">Save</button><button class="btn btn-secondary" id="refreshCatalog">Refresh now</button><span class="save-msg" id="sheetMsg"></span></div></div>' +
+      '<div class="card"><h3>Danger zone</h3><button class="btn btn-danger" id="deleteProjectBtn">Delete this agent</button></div>';
+
     $('saveSheet').addEventListener('click', async () => {
       try {
-        await api(`/projects/${currentSlug}/sheet`, {
+        await api('/projects/' + currentSlug + '/sheet', {
           method: 'PUT',
           body: {
             sheetId: $('f_sheetId').value.trim(),
@@ -495,8 +641,8 @@
     $('refreshCatalog').addEventListener('click', async () => {
       $('sheetMsg').textContent = 'Refreshing…';
       try {
-        const r = await api(`/projects/${currentSlug}/sheet/refresh`, { method: 'POST' });
-        $('sheetMsg').textContent = r.lastRefreshError ? `Error: ${r.lastRefreshError}` : `Loaded ${r.productsLoaded} products.`;
+        const r = await api('/projects/' + currentSlug + '/sheet/refresh', { method: 'POST' });
+        $('sheetMsg').textContent = r.lastRefreshError ? ('Error: ' + r.lastRefreshError) : ('Loaded ' + r.productsLoaded + ' items.');
         loadProjects();
       } catch (e) { $('sheetMsg').textContent = e.message; }
     });
@@ -504,41 +650,30 @@
   }
 
   function renderLlmTab(el, detail) {
-    el.innerHTML = `
-      <div class="card">
-        <h3>LLM engine</h3>
-        <div class="row-2">
-          <div class="field">
-            <label>Provider</label>
-            <select id="f_provider">
-              <option value="none" ${detail.llm.provider === 'none' ? 'selected' : ''}>None (rule-based only)</option>
-              <option value="openai" ${detail.llm.provider === 'openai' ? 'selected' : ''}>OpenAI</option>
-              <option value="anthropic" ${detail.llm.provider === 'anthropic' ? 'selected' : ''}>Anthropic</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Model (optional)</label>
-            <input id="f_model" value="${escapeHtml(detail.llm.model || '')}" placeholder="e.g. gpt-5.4-mini or claude-sonnet-5" />
-          </div>
-        </div>
-        <div class="field">
-          <label>API key ${detail.llm.apiKeyMasked ? `— currently: ${detail.llm.apiKeyMasked}` : ''}</label>
-          <input id="f_apiKey" type="password" placeholder="${detail.llm.apiKeyMasked ? 'paste to replace' : 'sk-... / sk-ant-...'}" />
-        </div>
-        <div class="hint">If no key is set, this project's agent uses the built-in rule-based engine automatically — it never fails or goes offline for lack of an LLM key. Token usage and estimated cost for this project appear in <a href="#" id="gotoUsageFromLlm">Usage &amp; Costs</a>.</div>
-        <div class="save-row">
-          <button class="btn btn-primary" id="saveLlm">Save LLM config</button>
-          <span class="save-msg" id="llmMsg"></span>
-        </div>
-      </div>
-    `;
-    $('gotoUsageFromLlm').addEventListener('click', (e) => { e.preventDefault(); currentView = 'usage'; currentSlug = null; renderProjectList(); renderUsageView(); });
+    el.innerHTML =
+      '<div class="card"><h3>LLM engine</h3><div class="row-2">' +
+        '<div class="field"><label>Provider</label><select id="f_provider">' +
+          '<option value="none"' + (detail.llm.provider === 'none' ? ' selected' : '') + '>None' + (detail.hasDataSource ? ' (rule-based only)' : ' (agent inactive)') + '</option>' +
+          '<option value="openai"' + (detail.llm.provider === 'openai' ? ' selected' : '') + '>OpenAI</option>' +
+          '<option value="anthropic"' + (detail.llm.provider === 'anthropic' ? ' selected' : '') + '>Anthropic</option>' +
+        '</select></div>' +
+        '<div class="field"><label>Model (optional)</label><input id="f_model" value="' + escapeHtml(detail.llm.model || '') + '" placeholder="e.g. gpt-5.4-mini or claude-sonnet-5" /></div>' +
+      '</div>' +
+      '<div class="field"><label>API key ' + (detail.llm.apiKeyMasked ? ('— currently: ' + detail.llm.apiKeyMasked) : '') + '</label>' +
+      '<input id="f_apiKey" type="password" placeholder="' + (detail.llm.apiKeyMasked ? 'paste to replace' : 'sk-... / sk-ant-...') + '" /></div>' +
+      '<div class="hint">' + (detail.hasDataSource
+        ? 'If no key is set, this agent uses the built-in rule-based engine automatically — it never fails or goes offline for lack of an LLM key.'
+        : 'This agent has no data source, so it needs an LLM key to respond at all — without one it will reply with a message asking you to configure it.') +
+      ' Token usage and estimated cost appear in the <a href="#" id="gotoUsageTab">Usage</a> tab.</div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="saveLlm">Save</button><span class="save-msg" id="llmMsg"></span></div></div>';
+
+    $('gotoUsageTab').addEventListener('click', (e) => { e.preventDefault(); currentTab = 'usage'; renderMain(detail); });
     $('saveLlm').addEventListener('click', async () => {
       try {
         const body = { provider: $('f_provider').value, model: $('f_model').value.trim() };
         const key = $('f_apiKey').value.trim();
         if (key) body.apiKey = key;
-        await api(`/projects/${currentSlug}/llm`, { method: 'PUT', body });
+        await api('/projects/' + currentSlug + '/llm', { method: 'PUT', body });
         $('llmMsg').textContent = 'Saved.';
         setTimeout(() => selectProject(currentSlug), 400);
       } catch (e) { $('llmMsg').textContent = e.message; $('llmMsg').style.color = 'var(--red)'; }
@@ -547,56 +682,31 @@
 
   function renderGuardrailsTab(el, detail) {
     const g = detail.guardrails;
-    el.innerHTML = `
-      <div class="card">
-        <h3>Behavior instructions</h3>
-        <div class="field">
-          <label>Extra system instructions</label>
-          <textarea id="f_sysInstr" placeholder="e.g. Never discuss competitor brands. Keep a warm, formal tone.">${escapeHtml(g.systemInstructions || '')}</textarea>
-          <div class="hint">Appended to the LLM's system prompt. Only applies when an LLM key is configured.</div>
-        </div>
-        <div class="field">
-          <label>Blocked terms (comma-separated)</label>
-          <input id="f_blocked" value="${escapeHtml((g.blockedTerms || []).join(', '))}" placeholder="e.g. refund, competitor, discount code" />
-          <div class="hint">If a query contains any of these, the agent skips recommending and replies with the off-topic message below instead — works even without an LLM key.</div>
-        </div>
-        <div class="field">
-          <label>Off-topic / blocked reply message</label>
-          <input id="f_offTopic" value="${escapeHtml(g.offTopicMessage || '')}" />
-        </div>
-      </div>
-      <div class="card">
-        <h3>Limits</h3>
-        <div class="row-2">
-          <div class="field">
-            <label>Min price</label>
-            <input id="f_minPrice" type="number" value="${g.minPrice ?? ''}" placeholder="no minimum" />
-          </div>
-          <div class="field">
-            <label>Max price</label>
-            <input id="f_maxPrice" type="number" value="${g.maxPrice ?? ''}" placeholder="no maximum" />
-          </div>
-        </div>
-        <div class="field">
-          <label>Max recommendations per reply (1-5)</label>
-          <input id="f_maxRec" type="number" min="1" max="5" value="${g.maxRecommendations || 3}" />
-        </div>
-        <div class="save-row">
-          <button class="btn btn-primary" id="saveGuardrails">Save guardrails</button>
-          <span class="save-msg" id="guardMsg"></span>
-        </div>
-      </div>
-    `;
+    el.innerHTML =
+      '<div class="card"><h3>Behavior instructions</h3>' +
+      '<div class="field"><label>Extra system instructions</label><textarea id="f_sysInstr" placeholder="Describe this agent\'s job, tone, and any hard rules.">' + escapeHtml(g.systemInstructions || '') + '</textarea>' +
+      '<div class="hint">Appended to the LLM\'s system prompt. Only applies when an LLM key is configured.</div></div>' +
+      '<div class="field"><label>Blocked terms (comma-separated)</label><input id="f_blocked" value="' + escapeHtml((g.blockedTerms || []).join(', ')) + '" placeholder="e.g. refund, competitor, discount code" />' +
+      '<div class="hint">If a message contains any of these, the agent skips responding and replies with the message below instead — works even without an LLM key.</div></div>' +
+      '<div class="field"><label>Off-topic / blocked reply message</label><input id="f_offTopic" value="' + escapeHtml(g.offTopicMessage || '') + '" /></div></div>' +
+      (detail.hasDataSource ?
+        '<div class="card"><h3>Limits</h3><div class="row-2">' +
+          '<div class="field"><label>Min price</label><input id="f_minPrice" type="number" value="' + (g.minPrice ?? '') + '" placeholder="no minimum" /></div>' +
+          '<div class="field"><label>Max price</label><input id="f_maxPrice" type="number" value="' + (g.maxPrice ?? '') + '" placeholder="no maximum" /></div>' +
+        '</div><div class="field"><label>Max recommendations per reply (1-5)</label><input id="f_maxRec" type="number" min="1" max="5" value="' + (g.maxRecommendations || 3) + '" /></div></div>'
+        : '') +
+      '<div class="save-row" style="margin-left:2px;"><button class="btn btn-primary" id="saveGuardrails">Save guardrails</button><span class="save-msg" id="guardMsg"></span></div>';
+
     $('saveGuardrails').addEventListener('click', async () => {
       try {
-        await api(`/projects/${currentSlug}/guardrails`, {
+        await api('/projects/' + currentSlug + '/guardrails', {
           method: 'PUT',
           body: {
             systemInstructions: $('f_sysInstr').value.trim(),
             blockedTerms: $('f_blocked').value,
-            minPrice: $('f_minPrice').value === '' ? null : Number($('f_minPrice').value),
-            maxPrice: $('f_maxPrice').value === '' ? null : Number($('f_maxPrice').value),
-            maxRecommendations: Number($('f_maxRec').value) || 3,
+            minPrice: detail.hasDataSource ? ($('f_minPrice').value === '' ? null : Number($('f_minPrice').value)) : null,
+            maxPrice: detail.hasDataSource ? ($('f_maxPrice').value === '' ? null : Number($('f_maxPrice').value)) : null,
+            maxRecommendations: detail.hasDataSource ? (Number($('f_maxRec').value) || 3) : 3,
             offTopicMessage: $('f_offTopic').value.trim(),
           },
         });
@@ -605,30 +715,62 @@
     });
   }
 
+  async function renderProjectUsageTab(el, detail) {
+    el.innerHTML = '<div class="hint">Loading usage…</div>';
+    let summary, timeline, log;
+    try {
+      const results = await Promise.all([
+        api('/projects/' + currentSlug + '/usage?days=30'),
+        api('/projects/' + currentSlug + '/usage/timeline?days=14'),
+        api('/projects/' + currentSlug + '/usage/log?limit=50'),
+      ]);
+      summary = results[0]; timeline = results[1]; log = results[2];
+    } catch (e) {
+      el.innerHTML = '<div class="hint">Couldn\'t load usage: ' + escapeHtml(e.message) + '</div>';
+      return;
+    }
+    if (currentSlug !== detail.slug) return;
+
+    const daily = timeline.daily.slice().reverse();
+    const maxCost = Math.max(0.0001, ...daily.map(d => Number(d.cost_usd) || 0));
+    const bars = daily.map(d =>
+      '<div class="bar-col" title="' + fmtDate(d.day) + ': ' + fmtInt(d.request_count) + ' requests, ' + fmtUsd(d.cost_usd) + '">' +
+        '<div class="bar-fill" style="height:' + Math.max(3, (Number(d.cost_usd) || 0) / maxCost * 120) + 'px"></div>' +
+        '<div class="bar-date">' + fmtDate(d.day) + '</div>' +
+      '</div>'
+    ).join('');
+
+    const logRows = log.logs.map((r) =>
+      '<tr><td>' + fmtDateTime(r.created_at) + '</td>' +
+      '<td><span class="provider-pill ' + r.provider + '">' + r.provider + '</span></td>' +
+      '<td>' + escapeHtml(r.model || '—') + '</td><td>' + fmtInt(r.input_tokens) + '</td><td>' + fmtInt(r.output_tokens) + '</td>' +
+      '<td style="color:var(--cyan-bright);">' + fmtUsd(r.cost_usd) + '</td></tr>'
+    ).join('');
+
+    el.innerHTML =
+      '<div class="row-3" style="margin-bottom:18px;">' +
+        '<div class="stat-card"><div class="stat-label">Est. cost (30d)</div><div class="stat-value violet">' + fmtUsd(summary.cost_usd) + '</div></div>' +
+        '<div class="stat-card"><div class="stat-label">Requests (30d)</div><div class="stat-value">' + fmtInt(summary.request_count) + '</div></div>' +
+        '<div class="stat-card"><div class="stat-label">Tokens (30d)</div><div class="stat-value cyan">' + fmtInt(Number(summary.input_tokens) + Number(summary.output_tokens)) + '</div></div>' +
+      '</div>' +
+      '<div class="card"><h3>Daily trend — last 14 days</h3>' +
+      (daily.length === 0 ? '<div class="hint">No usage recorded yet for this agent.</div>' : '<div class="bar-chart">' + bars + '</div>') + '</div>' +
+      '<div class="card"><h3>Recent requests — date &amp; time</h3>' +
+      (log.logs.length === 0 ? '<div class="hint">No requests logged yet.</div>' :
+        '<table class="usage-table"><thead><tr><th>When</th><th>Provider</th><th>Model</th><th>Input</th><th>Output</th><th>Cost</th></tr></thead><tbody>' + logRows + '</tbody></table>'
+      ) + '</div>';
+  }
+
   function renderDeployTab(el, detail) {
     const origin = window.location.origin;
-    el.innerHTML = `
-      <div class="card">
-        <h3>API endpoints</h3>
-        <div class="deploy-label">Recommend (POST)</div>
-        <div class="deploy-box">${origin}/api/${detail.slug}/recommend</div>
-        <div class="deploy-label">Health (GET)</div>
-        <div class="deploy-box">${origin}/api/${detail.slug}/health</div>
-        <div class="hint">POST body: <code>{"query": "...", "sessionId": "optional"}</code></div>
-      </div>
-      <div class="card">
-        <h3>Test it live</h3>
-        <p class="hint" style="margin-bottom:12px;">This is the actual chat UI, wired to this project's API — try it right here.</p>
-        <div class="chat-embed-wrap">
-          <div class="chat-embed-frame">
-            <iframe src="/chat/${detail.slug}" title="Test chat for ${escapeHtml(detail.name)}"></iframe>
-          </div>
-        </div>
-        <div style="text-align:center; margin-top:10px;">
-          <a href="/chat/${detail.slug}" target="_blank" class="hint">Open in a full tab ↗</a>
-        </div>
-      </div>
-    `;
+    el.innerHTML =
+      '<div class="card"><h3>API endpoints</h3>' +
+      '<div class="deploy-label">Recommend / Chat (POST)</div><div class="deploy-box">' + origin + '/api/' + detail.slug + '/recommend</div>' +
+      '<div class="deploy-label">Health (GET)</div><div class="deploy-box">' + origin + '/api/' + detail.slug + '/health</div>' +
+      '<div class="hint">POST body: <code class="mono">{"query": "...", "sessionId": "optional"}</code></div></div>' +
+      '<div class="card"><h3>Test it live</h3><p class="hint" style="margin-bottom:14px;">This is the actual chat UI, wired to this agent\'s API — try it right here.</p>' +
+      '<div class="chat-embed-wrap"><div class="chat-embed-frame"><iframe src="/chat/' + detail.slug + '" title="Test chat"></iframe></div></div>' +
+      '<div style="text-align:center; margin-top:12px;"><a href="/chat/' + detail.slug + '" target="_blank" class="hint">Open in a full tab ↗</a></div></div>';
   }
 
   checkAuth();

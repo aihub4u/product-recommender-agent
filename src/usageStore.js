@@ -66,4 +66,36 @@ async function getDailyTotals(sinceDays = 30) {
   return rows;
 }
 
-module.exports = { logUsage, getProjectSummary, getAllProjectsSummary, getDailyTotals };
+// Per-project daily totals — for "usage by date" trend within a single agent.
+async function getProjectDailyTotals(projectId, sinceDays = 30) {
+  const { rows } = await db.query(
+    `SELECT
+       date_trunc('day', created_at) AS day,
+       COUNT(*)::int AS request_count,
+       COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+       COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+       COALESCE(SUM(cost_usd), 0)::float AS cost_usd
+     FROM usage_logs
+     WHERE project_id = $1 AND created_at >= now() - ($2 || ' days')::interval
+     GROUP BY day
+     ORDER BY day DESC`,
+    [projectId, String(sinceDays)]
+  );
+  return rows;
+}
+
+// Raw recent requests for a project, with exact date+time — the detailed
+// "usage by date and time" log view.
+async function getProjectRecentLogs(projectId, limit = 100) {
+  const { rows } = await db.query(
+    `SELECT provider, model, input_tokens, output_tokens, cost_usd, created_at
+     FROM usage_logs
+     WHERE project_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [projectId, limit]
+  );
+  return rows;
+}
+
+module.exports = { logUsage, getProjectSummary, getAllProjectsSummary, getDailyTotals, getProjectDailyTotals, getProjectRecentLogs };

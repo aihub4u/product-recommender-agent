@@ -1,15 +1,39 @@
 const ruleEngine = require('./ruleEngine');
 const llmEngine = require('./llmEngine');
+const chatEngine = require('./chatEngine');
 
 /**
- * Runs the recommendation decision for a single project/request.
- * Uses the LLM engine when the project has a valid provider+apiKey
- * configured; otherwise (or on LLM failure) falls back to the rule engine
- * so the API always returns something usable.
+ * Runs the recommendation/reply decision for a single project/request.
+ * - Catalog-based projects (hasDataSource: true): LLM engine if configured,
+ *   else rule engine, with automatic fallback on LLM failure.
+ * - Generic projects (hasDataSource: false): LLM-only conversational reply.
+ *   There's no rule-based fallback possible without a catalog, so failures
+ *   return a graceful plain-text message instead of erroring out.
  */
 async function decide(context) {
-  const { llmConfig } = context;
+  const { llmConfig, hasDataSource } = context;
   const hasLlm = Boolean(llmConfig && llmConfig.provider && llmConfig.provider !== 'none' && llmConfig.apiKey);
+
+  if (!hasDataSource) {
+    if (!hasLlm) {
+      return {
+        action: 'reply',
+        message: "This agent doesn't have an LLM provider configured yet, so it can't respond intelligently. Add one in the LLM tab to activate it.",
+        engineUsed: 'none',
+      };
+    }
+    try {
+      const result = await chatEngine.decide(context);
+      return { ...result, engineUsed: 'llm', provider: llmConfig.provider, model: llmConfig.model };
+    } catch (err) {
+      console.error(`[engine] chat engine failed (${llmConfig.provider}):`, err.message);
+      return {
+        action: 'reply',
+        message: "Sorry, I'm having trouble responding right now — please try again in a moment.",
+        engineUsed: 'error',
+      };
+    }
+  }
 
   if (hasLlm) {
     try {

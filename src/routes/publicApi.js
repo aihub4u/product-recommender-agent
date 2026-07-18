@@ -12,6 +12,18 @@ function formatProduct(p) {
   return { ...rest, price: priceValue !== null ? priceValue : p.price };
 }
 
+function logIfLlm(project, result) {
+  if (result.engineUsed === 'llm' && result.usage) {
+    usageStore.logUsage({
+      projectId: project.id,
+      provider: result.provider,
+      model: result.model,
+      inputTokens: result.usage.inputTokens,
+      outputTokens: result.usage.outputTokens,
+    }); // not awaited — must never block or fail the actual response
+  }
+}
+
 router.post('/:slug/recommend', async (req, res) => {
   try {
     const { slug } = req.params;
@@ -23,16 +35,11 @@ router.post('/:slug/recommend', async (req, res) => {
       return res.status(400).json({ error: 'A non-empty "query" string is required.' });
     }
 
-    if (project.products.length === 0) {
-      return res.status(503).json({
-        error: 'Product catalog is not loaded yet for this project. Check the sheet configuration in the admin dashboard.',
-      });
-    }
-
     const { id, session } = sessionStore.getOrCreate(sessionId, slug);
     const trimmedQuery = query.trim();
 
-    // Guardrail: blocked terms short-circuit before touching the engine at all.
+    // Guardrail: blocked terms short-circuit before touching the engine at all
+    // (applies to every agent type, catalog-based or generic).
     const blockedHit = guardrails.checkBlocked(trimmedQuery, project.guardrails);
     if (blockedHit) {
       session.history.push({ role: 'user', content: trimmedQuery });
@@ -40,11 +47,39 @@ router.post('/:slug/recommend', async (req, res) => {
       return res.json({ sessionId: id, action: 'blocked', message: project.guardrails.offTopicMessage });
     }
 
+    const apiKey = registry.getDecryptedApiKey(project);
+    const llmConfig = apiKey ? { provider: project.llmConfig.provider, apiKey, model: project.llmConfig.model } : null;
+    const systemPromptSuffix = guardrails.buildSystemPromptSuffix(project.guardrails);
+
+    // ---- Generic (no data source) agent: plain conversational reply ----
+    if (!project.hasDataSource) {
+      session.history.push({ role: 'user', content: trimmedQuery });
+
+      const result = await engine.decide({
+        query: trimmedQuery,
+        history: session.history.slice(0, -1),
+        llmConfig,
+        agentType: project.agentType,
+        systemPromptSuffix,
+        hasDataSource: false,
+      });
+
+      logIfLlm(project, result);
+      session.history.push({ role: 'assistant', content: result.message });
+
+      return res.json({ sessionId: id, action: 'reply', message: result.message, engineUsed: result.engineUsed });
+    }
+
+    // ---- Catalog-based agent (product recommendation) ----
+    if (project.products.length === 0) {
+      return res.status(503).json({
+        error: 'Product catalog is not loaded yet for this project. Check the sheet configuration in the admin dashboard.',
+      });
+    }
+
     session.history.push({ role: 'user', content: trimmedQuery });
 
     const maxRecommendations = guardrails.resolveMaxRecommendations(project.guardrails, 3);
-    const systemPromptSuffix = guardrails.buildSystemPromptSuffix(project.guardrails);
-    const apiKey = registry.getDecryptedApiKey(project);
 
     const result = await engine.decide({
       query: trimmedQuery,
@@ -52,22 +87,14 @@ router.post('/:slug/recommend', async (req, res) => {
       vocabulary: project.vocabulary,
       previousFilters: session.filters,
       history: session.history.slice(0, -1),
-      llmConfig: apiKey ? { provider: project.llmConfig.provider, apiKey, model: project.llmConfig.model } : null,
+      llmConfig,
       maxRecommendations,
       systemPromptSuffix,
+      hasDataSource: true,
     });
 
     session.filters = result.filters || session.filters;
-
-    if (result.engineUsed === 'llm' && result.usage) {
-      usageStore.logUsage({
-        projectId: project.id,
-        provider: result.provider,
-        model: result.model,
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-      }); // not awaited — must never block or fail the actual response
-    }
+    logIfLlm(project, result);
 
     if (result.action === 'clarify') {
       session.history.push({ role: 'assistant', content: result.question });
@@ -106,10 +133,11 @@ router.get('/:slug/health', (req, res) => {
   res.json({
     status: 'ok',
     project: project.slug,
-    engine: project.llmConfig.provider !== 'none' && project.llmConfig.apiKeyEnc ? project.llmConfig.provider : 'rule',
-    productsLoaded: project.products.length,
-    lastRefreshed: project.lastRefreshed,
-    lastRefreshError: project.lastRefreshError,
+    hasDataSource: project.hasDataSource,
+    engine: project.llmConfig.provider !== 'none' && project.llmConfig.apiKeyEnc ? project.llmConfig.provider : (project.hasDataSource ? 'rule' : 'none'),
+    productsLoaded: project.hasDataSource ? project.products.length : null,
+    lastRefreshed: project.hasDataSource ? project.lastRefreshed : null,
+    lastRefreshError: project.hasDataSource ? project.lastRefreshError : null,
   });
 });
 

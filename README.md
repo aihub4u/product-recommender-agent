@@ -160,6 +160,40 @@ Each project's **Test & Deploy** tab now embeds the actual chat UI inline (an if
 pointing at `/chat/:slug`) — no more jumping to a separate tab to test. A link to open it
 in a full tab is still there below the embed if you want more room.
 
+## Building any kind of agent, not just product recommendation
+
+When you create a new agent, the wizard shows a set of suggested agent types
+(FAQ & Support, Lead Qualification, Appointment Booking, Order Tracking,
+Payment Reminder, Feedback Collector, General Purpose, or Custom) grounded in
+common CPaaS use cases — pick one as a starting point or go fully custom.
+Each pre-fills a base system prompt you can edit freely afterward.
+
+The second step asks whether this agent needs a **connected data source**
+(a Google Sheet):
+
+- **Data source ON** (e.g. Product Recommendation): works exactly as
+  described above — Sheet tab appears, catalog-matching engine, price caps,
+  up-to-N recommendations.
+- **Data source OFF** (most other types): no Sheet tab at all. The agent is
+  a pure conversational LLM agent — it needs an LLM key to say anything
+  useful (it'll tell the visitor as much if none is configured, rather than
+  failing silently), and its replies are plain conversational text
+  (`action: "reply"`) instead of the recommend/clarify shape.
+
+Guardrails (system instructions, blocked terms, off-topic message) apply to
+every agent type. Price caps and max-recommendations only show up for
+data-source agents, since they're catalog-specific concepts.
+
+## Usage & Costs — now with date/time detail
+
+Each agent's own **Usage** tab (alongside Data Source/LLM/Guardrails/Test &
+Deploy) shows, in addition to the 30-day totals: a daily cost trend for the
+last 14 days, and a table of the most recent individual requests with exact
+date and time, provider, model, and per-request token/cost breakdown —
+useful for spotting exactly when a spike happened, not just that one did.
+
+## Security notes
+
 
 - Blocked-term and price-cap guardrails are enforced in code, not just prompted to the
   LLM — they apply even when no LLM is configured, and they can't be bypassed by

@@ -430,6 +430,8 @@
         addBubble({ sender: 'bot', text: data.question });
       } else if (data.action === 'blocked') {
         addBubble({ sender: 'bot', text: data.message });
+      } else if (data.action === 'reply') {
+        addBubble({ sender: 'bot', text: data.message });
       } else if (data.action === 'recommend') {
         addBubble({ sender: 'bot', text: data.reasoning || "Here's what I found for you:", products: data.products || [] });
       } else {

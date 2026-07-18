@@ -6,9 +6,15 @@ CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
+  agent_type TEXT DEFAULT 'custom',
+  has_data_source BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Safe to re-run against an existing table from an earlier version of this platform.
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS agent_type TEXT DEFAULT 'custom';
+ALTER TABLE projects ADD COLUMN IF NOT EXISTS has_data_source BOOLEAN DEFAULT true;
 
 CREATE TABLE IF NOT EXISTS project_sheet_config (
   project_id UUID PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,

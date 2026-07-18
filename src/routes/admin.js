@@ -3,6 +3,7 @@ const auth = require('../auth');
 const registry = require('../projectRegistry');
 const cryptoHelper = require('../crypto');
 const usageStore = require('../usageStore');
+const { AGENT_TYPES } = require('../agentTypes');
 
 const router = express.Router();
 
@@ -31,6 +32,11 @@ router.get('/me', auth.requireAdmin, (req, res) => res.json({ ok: true }));
 // Everything below requires admin auth.
 router.use(auth.requireAdmin);
 
+// ---- Agent type suggestions (for the creation wizard) ----
+router.get('/agent-types', (req, res) => {
+  res.json({ agentTypes: AGENT_TYPES.map(({ id, label, category, description, suggestedHasDataSource }) => ({ id, label, category, description, suggestedHasDataSource })) });
+});
+
 // ---- Projects ----
 router.get('/projects', (req, res) => {
   res.json({ projects: registry.listProjects() });
@@ -38,10 +44,13 @@ router.get('/projects', (req, res) => {
 
 router.post('/projects', async (req, res) => {
   try {
-    const { name } = req.body || {};
+    const { name, agentType, hasDataSource } = req.body || {};
     if (!name || !name.trim()) return res.status(400).json({ error: 'Project name is required.' });
-    const entry = await registry.createProject(name.trim());
-    res.json({ project: { id: entry.id, name: entry.name, slug: entry.slug } });
+    const entry = await registry.createProject(name.trim(), {
+      agentType: agentType || 'custom',
+      hasDataSource: hasDataSource !== false,
+    });
+    res.json({ project: { id: entry.id, name: entry.name, slug: entry.slug, agentType: entry.agentType, hasDataSource: entry.hasDataSource } });
   } catch (err) {
     console.error('[admin] create project failed:', err);
     res.status(500).json({ error: err.message });
@@ -56,6 +65,8 @@ router.get('/projects/:slug', (req, res) => {
     id: entry.id,
     name: entry.name,
     slug: entry.slug,
+    agentType: entry.agentType,
+    hasDataSource: entry.hasDataSource,
     productsLoaded: entry.products.length,
     lastRefreshed: entry.lastRefreshed,
     lastRefreshError: entry.lastRefreshError,
@@ -176,6 +187,32 @@ router.get('/projects/:slug/usage', async (req, res) => {
     const days = parseInt(req.query.days, 10) || 30;
     const summary = await usageStore.getProjectSummary(entry.id, days);
     res.json({ days, ...summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Usage broken down by date — the daily trend for this specific agent.
+router.get('/projects/:slug/usage/timeline', async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    const days = parseInt(req.query.days, 10) || 30;
+    const daily = await usageStore.getProjectDailyTotals(entry.id, days);
+    res.json({ days, daily });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Individual requests with exact date+time — the detailed usage log for this agent.
+router.get('/projects/:slug/usage/log', async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    const limit = Math.min(500, parseInt(req.query.limit, 10) || 100);
+    const logs = await usageStore.getProjectRecentLogs(entry.id, limit);
+    res.json({ logs });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
