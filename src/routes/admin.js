@@ -2,6 +2,7 @@ const express = require('express');
 const auth = require('../auth');
 const registry = require('../projectRegistry');
 const cryptoHelper = require('../crypto');
+const usageStore = require('../usageStore');
 
 const router = express.Router();
 
@@ -151,6 +152,32 @@ router.put('/projects/:slug/guardrails', async (req, res) => {
     res.json(updated);
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// ---- Usage & costs ----
+router.get('/usage', async (req, res) => {
+  try {
+    const days = parseInt(req.query.days, 10) || 30;
+    const [byProject, daily] = await Promise.all([
+      usageStore.getAllProjectsSummary(days),
+      usageStore.getDailyTotals(days),
+    ]);
+    res.json({ days, byProject, daily });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/projects/:slug/usage', async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    const days = parseInt(req.query.days, 10) || 30;
+    const summary = await usageStore.getProjectSummary(entry.id, days);
+    res.json({ days, ...summary });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

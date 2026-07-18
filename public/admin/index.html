@@ -3,17 +3,25 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Agent Platform — Admin</title>
+<title>Karix Agent Platform — Admin</title>
 <style>
   :root {
-    --ink: #16181d;
-    --ink-soft: #5b6270;
-    --line: #e4e6eb;
-    --bg: #f6f7f9;
+    /* Karix-inspired palette: deep navy, violet accent, cyan highlight */
+    --navy-950: #070c1a;
+    --navy-900: #0b1330;
+    --navy-800: #121c42;
+    --navy-700: #1a2657;
+    --navy-line: #23305f;
+    --ink: #10162b;
+    --ink-soft: #5b647c;
+    --line: #e3e6ef;
+    --bg: #f5f6fb;
     --panel: #ffffff;
-    --accent: #4f46e5;
-    --accent-hover: #4338ca;
-    --accent-soft: #eef0ff;
+    --violet: #7c5cff;
+    --violet-hover: #6a48f2;
+    --violet-soft: #efeaff;
+    --cyan: #22d3ee;
+    --cyan-soft: #e6fbff;
     --green: #16a34a;
     --red: #dc2626;
     --amber: #d97706;
@@ -25,14 +33,14 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     font-size: 14px;
   }
-  a { color: var(--accent); text-decoration: none; }
+  a { color: var(--violet); text-decoration: none; }
   button { font-family: inherit; cursor: pointer; }
   input, textarea, select {
     font-family: inherit; font-size: 13.5px; padding: 8px 10px;
     border: 1px solid var(--line); border-radius: 8px; width: 100%; outline: none;
     background: #fff; color: var(--ink);
   }
-  input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  input:focus, textarea:focus, select:focus { border-color: var(--violet); box-shadow: 0 0 0 3px var(--violet-soft); }
   label { font-size: 12px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 5px; }
   .field { margin-bottom: 14px; }
   .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
@@ -40,10 +48,10 @@
     display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
     border-radius: 8px; border: 1px solid transparent; font-weight: 600; font-size: 13px;
   }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-primary { background: var(--violet); color: #fff; }
+  .btn-primary:hover { background: var(--violet-hover); }
   .btn-secondary { background: #fff; border-color: var(--line); color: var(--ink); }
-  .btn-secondary:hover { background: #f3f4f6; }
+  .btn-secondary:hover { background: #f3f4f8; }
   .btn-danger { background: #fff; border-color: #fca5a5; color: var(--red); }
   .btn-danger:hover { background: #fef2f2; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -51,61 +59,101 @@
   #app { display: none; }
   #loginScreen {
     min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(circle at 20% 20%, #14205a 0%, var(--navy-950) 55%);
   }
   .login-card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    padding: 36px 32px; width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,0.06);
+    background: var(--panel); border-radius: 16px;
+    padding: 38px 34px; width: 350px; box-shadow: 0 20px 60px rgba(0,0,0,0.35);
   }
-  .login-card h1 { font-size: 18px; margin: 0 0 4px; }
-  .login-card p { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 20px; }
+  .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+  .login-brand-badge {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--violet), var(--cyan));
+    display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 14px;
+  }
+  .login-card h1 { font-size: 17px; margin: 0; }
+  .login-card p { font-size: 12.5px; color: var(--ink-soft); margin: 4px 0 22px; }
   .error-text { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
 
   .layout { display: flex; min-height: 100vh; }
   .sidebar {
-    width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line);
+    width: 264px; flex-shrink: 0; background: var(--navy-950); color: #cfd4e6;
     display: flex; flex-direction: column; padding: 18px 14px;
+    background-image: radial-gradient(circle at 100% 0%, rgba(124,92,255,0.18), transparent 45%);
   }
-  .brand { font-weight: 700; font-size: 15px; padding: 0 8px 16px; display: flex; align-items: center; gap: 8px; }
-  .brand-badge { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
-  .project-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
-  .project-item {
-    padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13.3px; font-weight: 500;
-    display: flex; align-items: center; justify-content: space-between; color: var(--ink-soft);
+  .brand { font-weight: 700; font-size: 14.5px; padding: 4px 8px 18px; display: flex; align-items: center; gap: 9px; color: #fff; }
+  .brand-badge {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--violet), var(--cyan));
+    color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
   }
-  .project-item:hover { background: #f3f4f6; }
-  .project-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-  .dot.green { background: var(--green); } .dot.amber { background: var(--amber); } .dot.grey { background: #c7cad1; }
-  .sidebar-footer { padding-top: 12px; border-top: 1px solid var(--line); margin-top: 10px; }
+  .brand-sub { font-size: 10.5px; color: #7c85a8; font-weight: 500; margin-top: 1px; }
 
-  .main { flex: 1; padding: 28px 36px; max-width: 900px; }
+  .nav-section-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #6a7396; font-weight: 700; padding: 14px 10px 6px; }
+  .project-list { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+  .project-item, .nav-item {
+    padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13.3px; font-weight: 500;
+    display: flex; align-items: center; justify-content: space-between; color: #b7bedb;
+  }
+  .project-item:hover, .nav-item:hover { background: rgba(255,255,255,0.06); color: #fff; }
+  .project-item.active, .nav-item.active { background: rgba(124,92,255,0.22); color: #fff; font-weight: 600; box-shadow: inset 2px 0 0 var(--violet); }
+  .nav-item svg { flex-shrink: 0; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot.green { background: #34d399; } .dot.amber { background: #fbbf24; } .dot.grey { background: #4b5578; }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-footer { padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.08); margin-top: 10px; }
+  .sidebar-footer .btn-secondary { background: transparent; border-color: rgba(255,255,255,0.14); color: #cfd4e6; }
+  .sidebar-footer .btn-secondary:hover { background: rgba(255,255,255,0.06); }
+
+  .main { flex: 1; padding: 28px 36px; max-width: 1000px; }
   .empty-state { color: var(--ink-soft); padding: 60px 0; text-align: center; }
 
   .project-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
   .project-header h1 { font-size: 21px; margin: 0; }
-  .slug-tag { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-soft); background: #f3f4f6; padding: 2px 7px; border-radius: 5px; }
+  .slug-tag { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-soft); background: #f0f1f7; padding: 2px 7px; border-radius: 5px; }
   .status-row { display: flex; gap: 8px; margin: 10px 0 22px; flex-wrap: wrap; }
   .badge { font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; }
-  .badge-grey { background: #f0f1f3; color: var(--ink-soft); }
+  .badge-grey { background: #f0f1f5; color: var(--ink-soft); }
   .badge-green { background: #ecfdf3; color: var(--green); }
   .badge-red { background: #fef2f2; color: var(--red); }
-  .badge-indigo { background: var(--accent-soft); color: var(--accent); }
+  .badge-violet { background: var(--violet-soft); color: var(--violet-hover); }
+  .badge-cyan { background: var(--cyan-soft); color: #0891b2; }
 
   .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
   .tab { padding: 9px 4px; margin-right: 20px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; border-bottom: 2px solid transparent; }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab.active { color: var(--violet); border-bottom-color: var(--violet); }
 
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
   .card h3 { font-size: 13.5px; margin: 0 0 14px; }
   .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
   .save-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
   .save-msg { font-size: 12px; color: var(--green); }
   textarea { resize: vertical; min-height: 70px; }
 
-  .deploy-box { background: #0f1117; color: #e5e7eb; border-radius: 8px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 8px; word-break: break-all; }
+  .deploy-box { background: var(--navy-950); color: #d7dcf5; border-radius: 8px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 8px; word-break: break-all; }
   .deploy-label { font-size: 11px; color: var(--ink-soft); margin: 12px 0 4px; font-weight: 600; }
 
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .chat-embed-wrap { display: flex; justify-content: center; padding: 10px 0 4px; }
+  .chat-embed-frame { width: 100%; max-width: 420px; height: 640px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 10px 30px rgba(10,20,60,0.08); }
+  .chat-embed-frame iframe { width: 100%; height: 100%; border: none; }
+
+  .stat-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .stat-label { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; margin-bottom: 6px; }
+  .stat-value { font-size: 22px; font-weight: 700; }
+  .stat-value.violet { color: var(--violet-hover); }
+  .stat-value.cyan { color: #0891b2; }
+
+  table.usage-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.usage-table th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  table.usage-table td { padding: 10px 10px; border-bottom: 1px solid #f0f1f7; }
+  table.usage-table tr:last-child td { border-bottom: none; }
+  .provider-pill { font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 20px; text-transform: uppercase; }
+  .provider-pill.openai { background: var(--cyan-soft); color: #0891b2; }
+  .provider-pill.anthropic { background: var(--violet-soft); color: var(--violet-hover); }
+  .provider-pill.rule { background: #f0f1f5; color: var(--ink-soft); }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(7,12,26,0.55); display: none; align-items: center; justify-content: center; z-index: 50; }
   .modal-overlay.show { display: flex; }
   .modal-card { background: #fff; border-radius: 12px; padding: 20px; width: 340px; }
   .modal-card h3 { margin: 0 0 14px; font-size: 15px; }
@@ -116,7 +164,13 @@
 
 <div id="loginScreen">
   <div class="login-card">
-    <h1>Agent Platform</h1>
+    <div class="login-brand">
+      <div class="login-brand-badge">K</div>
+      <div>
+        <div style="font-weight:700; font-size:14px;">Karix Agent Platform</div>
+        <div style="font-size:10.5px; color:var(--ink-soft);">a Tanla company</div>
+      </div>
+    </div>
     <p>Sign in to manage product recommendation agents.</p>
     <div class="field">
       <label>Admin password</label>
@@ -130,8 +184,26 @@
 <div id="app">
   <div class="layout">
     <div class="sidebar">
-      <div class="brand"><div class="brand-badge">AP</div> Agent Platform</div>
+      <div class="brand">
+        <div class="brand-badge">K</div>
+        <div>
+          Agent Platform
+          <div class="brand-sub">a Tanla company</div>
+        </div>
+      </div>
+
+      <div class="nav-section-label">Overview</div>
+      <div class="nav-item" id="navUsage">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
+          Usage &amp; Costs
+        </span>
+      </div>
+
+      <div class="nav-section-label">Projects</div>
       <div class="project-list" id="projectList"></div>
+
+      <div class="sidebar-spacer"></div>
       <div class="sidebar-footer">
         <button class="btn btn-secondary" id="newProjectBtn" style="width:100%; justify-content:center;">+ New Project</button>
         <button class="btn btn-secondary" id="logoutBtn" style="width:100%; justify-content:center; margin-top:8px;">Log out</button>
@@ -160,7 +232,7 @@
 <div class="modal-overlay" id="deleteModal">
   <div class="modal-card">
     <h3>Delete this project?</h3>
-    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 6px;">This permanently removes its config, sheet link, and stored keys. This can't be undone.</p>
+    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 6px;">This permanently removes its config, sheet link, stored keys, and usage history. This can't be undone.</p>
     <div class="modal-actions">
       <button class="btn btn-secondary" id="cancelDelete">Cancel</button>
       <button class="btn btn-danger" id="confirmDelete">Delete</button>
@@ -173,6 +245,7 @@
   const API = '/api/admin';
   let projects = [];
   let currentSlug = null;
+  let currentView = 'usage'; // 'usage' | 'project'
   let currentTab = 'sheet';
   let currentDetail = null;
 
@@ -190,70 +263,66 @@
     return data;
   }
 
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function fmtUsd(n) {
+    const v = Number(n) || 0;
+    return v < 0.01 && v > 0 ? '<$0.01' : '$' + v.toFixed(2);
+  }
+  function fmtInt(n) { return Number(n || 0).toLocaleString('en-IN'); }
+
   // ---- Auth ----
   async function checkAuth() {
-    try {
-      await api('/me');
-      showApp();
-    } catch (e) {
-      showLogin();
-    }
+    try { await api('/me'); showApp(); } catch (e) { showLogin(); }
   }
-
-  function showLogin() {
-    $('loginScreen').style.display = 'flex';
-    $('app').style.display = 'none';
-  }
-  function showApp() {
-    $('loginScreen').style.display = 'none';
-    $('app').style.display = 'block';
-    loadProjects();
-  }
+  function showLogin() { $('loginScreen').style.display = 'flex'; $('app').style.display = 'none'; }
+  function showApp() { $('loginScreen').style.display = 'none'; $('app').style.display = 'block'; loadProjects(); }
 
   $('loginBtn').addEventListener('click', async () => {
     $('loginError').textContent = '';
     try {
       await api('/login', { method: 'POST', body: { password: $('loginPassword').value } });
       showApp();
-    } catch (e) {
-      $('loginError').textContent = e.message;
-    }
+    } catch (e) { $('loginError').textContent = e.message; }
   });
   $('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
   $('logoutBtn').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); showLogin(); });
+
+  // ---- Sidebar nav ----
+  $('navUsage').addEventListener('click', () => { currentView = 'usage'; currentSlug = null; renderProjectList(); renderUsageView(); });
 
   // ---- Projects list ----
   async function loadProjects() {
     const data = await api('/projects');
     projects = data.projects;
     renderProjectList();
-    if (currentSlug && projects.find((p) => p.slug === currentSlug)) {
+    if (currentView === 'project' && currentSlug && projects.find((p) => p.slug === currentSlug)) {
       selectProject(currentSlug);
-    } else if (projects.length) {
-      selectProject(projects[0].slug);
     } else {
-      $('main').innerHTML = '<div class="empty-state">No projects yet — create one to get started.</div>';
+      renderUsageView();
     }
   }
 
   function renderProjectList() {
+    $('navUsage').classList.toggle('active', currentView === 'usage');
     const list = $('projectList');
     list.innerHTML = '';
     projects.forEach((p) => {
       const item = document.createElement('div');
-      item.className = 'project-item' + (p.slug === currentSlug ? ' active' : '');
+      item.className = 'project-item' + (currentView === 'project' && p.slug === currentSlug ? ' active' : '');
       const dotClass = p.lastRefreshError ? 'amber' : (p.productsLoaded > 0 ? 'green' : 'grey');
       item.innerHTML = `<span>${escapeHtml(p.name)}</span><span class="dot ${dotClass}"></span>`;
       item.addEventListener('click', () => selectProject(p.slug));
       list.appendChild(item);
     });
-  }
-
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    if (projects.length === 0) {
+      list.innerHTML = '<div style="font-size:12px; color:#6a7396; padding:8px 10px;">No projects yet.</div>';
+    }
   }
 
   async function selectProject(slug) {
+    currentView = 'project';
     currentSlug = slug;
     currentTab = 'sheet';
     renderProjectList();
@@ -281,13 +350,66 @@
     await api(`/projects/${currentSlug}`, { method: 'DELETE' });
     $('deleteModal').classList.remove('show');
     currentSlug = null;
+    currentView = 'usage';
     await loadProjects();
   });
 
-  // ---- Main panel ----
+  // ---- Global Usage & Costs view ----
+  async function renderUsageView() {
+    $('main').innerHTML = `<div class="empty-state">Loading usage…</div>`;
+    let data;
+    try {
+      data = await api('/usage?days=30');
+    } catch (e) {
+      $('main').innerHTML = `<div class="empty-state">Couldn't load usage data: ${escapeHtml(e.message)}</div>`;
+      return;
+    }
+    if (currentView !== 'usage') return; // user navigated away while loading
+
+    const totalCost = data.byProject.reduce((s, p) => s + (Number(p.cost_usd) || 0), 0);
+    const totalRequests = data.byProject.reduce((s, p) => s + (Number(p.request_count) || 0), 0);
+    const totalInput = data.byProject.reduce((s, p) => s + (Number(p.input_tokens) || 0), 0);
+    const totalOutput = data.byProject.reduce((s, p) => s + (Number(p.output_tokens) || 0), 0);
+
+    const rows = data.byProject.map((p) => `
+      <tr>
+        <td><a href="#" data-slug="${p.slug}" class="usage-project-link" style="font-weight:600;">${escapeHtml(p.name)}</a></td>
+        <td>${fmtInt(p.request_count)}</td>
+        <td>${fmtInt(p.input_tokens)}</td>
+        <td>${fmtInt(p.output_tokens)}</td>
+        <td style="font-weight:600;">${fmtUsd(p.cost_usd)}</td>
+      </tr>
+    `).join('');
+
+    $('main').innerHTML = `
+      <div class="project-header"><h1>Usage &amp; Costs</h1></div>
+      <div class="hint" style="margin-bottom:20px;">LLM token usage and estimated spend across all projects, last 30 days. Costs are estimated from published per-token pricing — treat as budgeting guidance, not an exact bill.</div>
+
+      <div class="row-3" style="margin-bottom:20px;">
+        <div class="stat-card"><div class="stat-label">Total estimated cost</div><div class="stat-value violet">${fmtUsd(totalCost)}</div></div>
+        <div class="stat-card"><div class="stat-label">LLM requests</div><div class="stat-value">${fmtInt(totalRequests)}</div></div>
+        <div class="stat-card"><div class="stat-label">Total tokens</div><div class="stat-value cyan">${fmtInt(totalInput + totalOutput)}</div></div>
+      </div>
+
+      <div class="card">
+        <h3>By project</h3>
+        ${data.byProject.length === 0 ? '<div class="hint">No LLM usage recorded yet — usage appears here once a project with an LLM key configured handles a recommend request.</div>' : `
+        <table class="usage-table">
+          <thead><tr><th>Project</th><th>Requests</th><th>Input tokens</th><th>Output tokens</th><th>Est. cost</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`}
+      </div>
+    `;
+
+    document.querySelectorAll('.usage-project-link').forEach((el) => {
+      el.addEventListener('click', (e) => { e.preventDefault(); selectProject(el.dataset.slug); });
+    });
+  }
+
+  // ---- Main panel (project view) ----
   function renderMain(detail) {
     const engineBadge = detail.llm.provider !== 'none' && detail.llm.apiKeyMasked
-      ? `<span class="badge badge-indigo">${detail.llm.provider}</span>`
+      ? `<span class="badge badge-violet">${detail.llm.provider}</span>`
       : `<span class="badge badge-grey">rule engine</span>`;
     const productsBadge = detail.productsLoaded > 0
       ? `<span class="badge badge-green">${detail.productsLoaded} products loaded</span>`
@@ -403,13 +525,14 @@
           <label>API key ${detail.llm.apiKeyMasked ? `— currently: ${detail.llm.apiKeyMasked}` : ''}</label>
           <input id="f_apiKey" type="password" placeholder="${detail.llm.apiKeyMasked ? 'paste to replace' : 'sk-... / sk-ant-...'}" />
         </div>
-        <div class="hint">If no key is set, this project's agent uses the built-in rule-based engine automatically — it never fails or goes offline for lack of an LLM key.</div>
+        <div class="hint">If no key is set, this project's agent uses the built-in rule-based engine automatically — it never fails or goes offline for lack of an LLM key. Token usage and estimated cost for this project appear in <a href="#" id="gotoUsageFromLlm">Usage &amp; Costs</a>.</div>
         <div class="save-row">
           <button class="btn btn-primary" id="saveLlm">Save LLM config</button>
           <span class="save-msg" id="llmMsg"></span>
         </div>
       </div>
     `;
+    $('gotoUsageFromLlm').addEventListener('click', (e) => { e.preventDefault(); currentView = 'usage'; currentSlug = null; renderProjectList(); renderUsageView(); });
     $('saveLlm').addEventListener('click', async () => {
       try {
         const body = { provider: $('f_provider').value, model: $('f_model').value.trim() };
@@ -495,8 +618,15 @@
       </div>
       <div class="card">
         <h3>Test it live</h3>
-        <p class="hint" style="margin-bottom:12px;">Opens a WhatsApp-style chat wired to this project's API.</p>
-        <a class="btn btn-primary" href="/chat/${detail.slug}" target="_blank">Open test chat ↗</a>
+        <p class="hint" style="margin-bottom:12px;">This is the actual chat UI, wired to this project's API — try it right here.</p>
+        <div class="chat-embed-wrap">
+          <div class="chat-embed-frame">
+            <iframe src="/chat/${detail.slug}" title="Test chat for ${escapeHtml(detail.name)}"></iframe>
+          </div>
+        </div>
+        <div style="text-align:center; margin-top:10px;">
+          <a href="/chat/${detail.slug}" target="_blank" class="hint">Open in a full tab ↗</a>
+        </div>
       </div>
     `;
   }

@@ -14,7 +14,7 @@ async function decide(context) {
   if (hasLlm) {
     try {
       const result = await llmEngine.decide(context);
-      return { ...result, engineUsed: 'llm' };
+      return { ...result, engineUsed: 'llm', provider: llmConfig.provider, model: llmConfig.model };
     } catch (err) {
       console.error(`[engine] LLM engine failed (${llmConfig.provider}), falling back to rule engine:`, err.message);
       const result = ruleEngine.decide(context);

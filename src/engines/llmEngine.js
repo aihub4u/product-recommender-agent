@@ -87,7 +87,11 @@ async function callOpenAI({ apiKey, model, systemPrompt, userMessage }) {
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('OpenAI returned no message content');
-  return parseModelJson(content);
+  const usage = {
+    inputTokens: data.usage?.prompt_tokens || 0,
+    outputTokens: data.usage?.completion_tokens || 0,
+  };
+  return { parsed: parseModelJson(content), usage };
 }
 
 async function callAnthropic({ apiKey, model, systemPrompt, userMessage }) {
@@ -112,7 +116,11 @@ async function callAnthropic({ apiKey, model, systemPrompt, userMessage }) {
   const data = await response.json();
   const textBlock = (data.content || []).find((b) => b.type === 'text');
   if (!textBlock) throw new Error('Anthropic returned no text content');
-  return parseModelJson(textBlock.text);
+  const usage = {
+    inputTokens: data.usage?.input_tokens || 0,
+    outputTokens: data.usage?.output_tokens || 0,
+  };
+  return { parsed: parseModelJson(textBlock.text), usage };
 }
 
 async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '' }) {
@@ -125,16 +133,21 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
   const userMessage = buildUserMessage(query, history, candidates);
 
   let parsed;
+  let usage = { inputTokens: 0, outputTokens: 0 };
   if (llmConfig.provider === 'openai') {
-    parsed = await callOpenAI({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
+    const result = await callOpenAI({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
+    parsed = result.parsed;
+    usage = result.usage;
   } else if (llmConfig.provider === 'anthropic') {
-    parsed = await callAnthropic({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
+    const result = await callAnthropic({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
+    parsed = result.parsed;
+    usage = result.usage;
   } else {
     throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
   }
 
   if (parsed.action === 'clarify') {
-    return { action: 'clarify', question: parsed.question, filters: previousFilters || {} };
+    return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage };
   }
 
   if (parsed.action === 'recommend') {
@@ -148,7 +161,7 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
       throw new Error('LLM recommended ids not present in catalog');
     }
 
-    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning };
+    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning, usage };
   }
 
   throw new Error(`Unrecognized LLM action: ${parsed.action}`);

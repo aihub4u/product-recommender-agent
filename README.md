@@ -134,7 +134,32 @@ exist anymore after this deploy — the platform replaces them with `/api/:slug/
    the platform can read — you'll need to re-enter it once).
 4. Your new URLs will be `/api/manyavar-store/recommend` and `/chat/manyavar-store`.
 
-## Security notes
+## Usage & Costs
+
+The sidebar's **Usage & Costs** view (separate from any single project) shows LLM token
+usage and estimated spend across every project for the last 30 days: total cost, request
+count, input/output tokens, broken down per project. Click a project row to jump straight
+into it.
+
+This is populated automatically — every request that goes through a project's LLM engine
+(OpenAI or Anthropic) logs its token counts to a `usage_logs` table (added automatically
+via the same migration file, no manual step needed). Cost is estimated from a built-in
+per-model pricing table in `src/pricing.js` — these are published rates as of when this
+was built and **will drift over time**; treat the dollar figures as budgeting guidance,
+not an exact reconciliation against your actual provider invoice. If you add a model that
+isn't in that pricing table, usage still logs correctly (tokens are exact), just with an
+estimated fallback rate for the cost figure.
+
+Usage logging never blocks or fails a recommendation request — if the logging insert
+fails for any reason, it's caught and logged server-side, the user-facing response is
+unaffected.
+
+## Testing a project
+
+Each project's **Test & Deploy** tab now embeds the actual chat UI inline (an iframe
+pointing at `/chat/:slug`) — no more jumping to a separate tab to test. A link to open it
+in a full tab is still there below the embed if you want more room.
+
 
 - Blocked-term and price-cap guardrails are enforced in code, not just prompted to the
   LLM — they apply even when no LLM is configured, and they can't be bypassed by

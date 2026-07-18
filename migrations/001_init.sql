@@ -39,4 +39,18 @@ CREATE TABLE IF NOT EXISTS project_guardrails (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS usage_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL,
+  model TEXT,
+  input_tokens INTEGER DEFAULT 0,
+  output_tokens INTEGER DEFAULT 0,
+  cost_usd NUMERIC(12,6),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_logs_project ON usage_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at);
+
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);

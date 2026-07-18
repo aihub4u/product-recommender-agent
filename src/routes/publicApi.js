@@ -3,6 +3,7 @@ const registry = require('../projectRegistry');
 const sessionStore = require('../sessionStore');
 const engine = require('../engines');
 const guardrails = require('../guardrails');
+const usageStore = require('../usageStore');
 
 const router = express.Router();
 
@@ -57,6 +58,16 @@ router.post('/:slug/recommend', async (req, res) => {
     });
 
     session.filters = result.filters || session.filters;
+
+    if (result.engineUsed === 'llm' && result.usage) {
+      usageStore.logUsage({
+        projectId: project.id,
+        provider: result.provider,
+        model: result.model,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+      }); // not awaited — must never block or fail the actual response
+    }
 
     if (result.action === 'clarify') {
       session.history.push({ role: 'assistant', content: result.question });
