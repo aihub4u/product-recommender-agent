@@ -2,6 +2,7 @@ const db = require('./db');
 const cryptoHelper = require('./crypto');
 const googleSheets = require('./googleSheets');
 const globalConfig = require('./globalConfig');
+const knowledgeStore = require('./knowledgeStore');
 
 function rowToSkill(row) {
   return {
@@ -69,11 +70,13 @@ function rowToSheetConfig(row) {
 }
 
 function rowToLlmConfig(row) {
-  if (!row) return { provider: 'none', apiKeyEnc: null, model: '' };
+  if (!row) return { provider: 'none', apiKeyEnc: null, model: '', embeddingApiKeyEnc: null, embeddingModel: 'text-embedding-3-small' };
   return {
     provider: row.provider || 'none',
     apiKeyEnc: row.api_key_enc || null,
     model: row.model || '',
+    embeddingApiKeyEnc: row.embedding_api_key_enc || null,
+    embeddingModel: row.embedding_model || 'text-embedding-3-small',
   };
 }
 
@@ -123,6 +126,7 @@ async function loadProjectIntoCache(projectRow) {
     nextRefreshAt: 0,
   };
   cache.set(projectRow.slug, entry);
+  await knowledgeStore.loadChunksForProject(projectRow.id, projectRow.slug);
   return entry;
 }
 
@@ -171,6 +175,7 @@ async function deleteProject(slug) {
   if (!entry) return false;
   await db.query('DELETE FROM projects WHERE id = $1', [entry.id]);
   cache.delete(slug);
+  knowledgeStore.clearChunkCache(slug);
   return true;
 }
 
@@ -205,7 +210,7 @@ async function updateSheetConfig(slug, { sheetId, range, catalogRefreshMs, servi
   return entry.sheetConfig;
 }
 
-async function updateLlmConfig(slug, { provider, apiKey, model, clearApiKey }) {
+async function updateLlmConfig(slug, { provider, apiKey, model, clearApiKey, embeddingApiKey, embeddingModel, clearEmbeddingApiKey }) {
   const entry = getProject(slug);
   if (!entry) throw new Error('Project not found');
 
@@ -220,6 +225,13 @@ async function updateLlmConfig(slug, { provider, apiKey, model, clearApiKey }) {
   } else if (apiKey) {
     fields.push(`api_key_enc = $${i++}`);
     values.push(cryptoHelper.encrypt(apiKey));
+  }
+  if (embeddingModel !== undefined) { fields.push(`embedding_model = $${i++}`); values.push(embeddingModel); }
+  if (clearEmbeddingApiKey) {
+    fields.push(`embedding_api_key_enc = NULL`);
+  } else if (embeddingApiKey) {
+    fields.push(`embedding_api_key_enc = $${i++}`);
+    values.push(cryptoHelper.encrypt(embeddingApiKey));
   }
   fields.push(`updated_at = now()`);
 
@@ -316,6 +328,22 @@ function startAutoRefresh() {
 function getDecryptedApiKey(entry) {
   if (!entry.llmConfig.apiKeyEnc) return null;
   return cryptoHelper.decrypt(entry.llmConfig.apiKeyEnc);
+}
+
+/**
+ * Resolves the OpenAI key to use for embeddings: a dedicated embeddings key
+ * if one is set, otherwise the main API key IF the provider is already
+ * OpenAI (safe to reuse — same provider, same key type). Returns null if
+ * neither is available, meaning RAG can't run for this project yet.
+ */
+function getEmbeddingConfig(entry) {
+  if (entry.llmConfig.embeddingApiKeyEnc) {
+    return { apiKey: cryptoHelper.decrypt(entry.llmConfig.embeddingApiKeyEnc), model: entry.llmConfig.embeddingModel };
+  }
+  if (entry.llmConfig.provider === 'openai' && entry.llmConfig.apiKeyEnc) {
+    return { apiKey: cryptoHelper.decrypt(entry.llmConfig.apiKeyEnc), model: entry.llmConfig.embeddingModel };
+  }
+  return null;
 }
 
 // ---- Skills (external API tools) ----
@@ -422,6 +450,7 @@ module.exports = {
   refreshCatalog,
   startAutoRefresh,
   getDecryptedApiKey,
+  getEmbeddingConfig,
   listSkills,
   createSkill,
   updateSkill,

@@ -79,4 +79,41 @@ CREATE TABLE IF NOT EXISTS project_skills (
 
 CREATE INDEX IF NOT EXISTS idx_project_skills_project ON project_skills(project_id);
 
+-- Dedicated embeddings key — required when the agent's main LLM provider is
+-- Anthropic (no native embeddings API), optional override when it's OpenAI
+-- (defaults to reusing the main OpenAI key if this is left blank).
+ALTER TABLE project_llm_config ADD COLUMN IF NOT EXISTS embedding_api_key_enc TEXT;
+ALTER TABLE project_llm_config ADD COLUMN IF NOT EXISTS embedding_model TEXT DEFAULT 'text-embedding-3-small';
+
+CREATE TABLE IF NOT EXISTS knowledge_sources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  type TEXT NOT NULL, -- 'file' | 'website'
+  name TEXT NOT NULL, -- filename, or the root URL for website sources
+  status TEXT DEFAULT 'pending', -- pending | indexing | ready | error
+  error_message TEXT,
+  chunk_count INTEGER DEFAULT 0,
+  pages_indexed INTEGER DEFAULT 0, -- website sources only
+  last_indexed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_sources_project ON knowledge_sources(project_id);
+
+-- Embeddings stored as JSONB float arrays rather than a native vector column
+-- (pgvector isn't guaranteed available on every hosting provider) — cosine
+-- similarity is computed in-app. Fine for realistic knowledge-base sizes
+-- (hundreds to low thousands of chunks); revisit with pgvector for scale.
+CREATE TABLE IF NOT EXISTS knowledge_chunks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  source_id UUID REFERENCES knowledge_sources(id) ON DELETE CASCADE,
+  source_name TEXT,
+  content TEXT NOT NULL,
+  embedding JSONB NOT NULL,
+  chunk_index INTEGER,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_project ON knowledge_chunks(project_id);
+CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_source ON knowledge_chunks(source_id);
+
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);

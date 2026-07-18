@@ -390,6 +390,15 @@
     return data;
   }
 
+  async function apiUpload(path, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(API + path, { method: 'POST', credentials: 'include', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
@@ -587,7 +596,7 @@
 
     const tabs = [];
     if (detail.hasDataSource) tabs.push(['sheet', 'Data Source']);
-    tabs.push(['llm', 'LLM'], ['skills', 'Skills'], ['guardrails', 'Guardrails'], ['usage', 'Usage'], ['deploy', 'Test & Deploy']);
+    tabs.push(['llm', 'LLM'], ['skills', 'Skills'], ['knowledge', 'Knowledge'], ['guardrails', 'Guardrails'], ['usage', 'Usage'], ['deploy', 'Test & Deploy']);
 
     $('main').innerHTML =
       '<div class="project-header"><div><div class="agent-type-tag">' + escapeHtml(typeLabel) + '</div><h1>' + escapeHtml(detail.name) + '</h1></div>' +
@@ -605,6 +614,7 @@
     if (currentTab === 'sheet' && detail.hasDataSource) renderSheetTab(content, detail);
     else if (currentTab === 'llm') renderLlmTab(content, detail);
     else if (currentTab === 'skills') renderSkillsTab(content, detail);
+    else if (currentTab === 'knowledge') renderKnowledgeTab(content, detail);
     else if (currentTab === 'guardrails') renderGuardrailsTab(content, detail);
     else if (currentTab === 'usage') renderProjectUsageTab(content, detail);
     else renderDeployTab(content, detail);
@@ -666,7 +676,20 @@
         ? 'If no key is set, this agent uses the built-in rule-based engine automatically — it never fails or goes offline for lack of an LLM key.'
         : 'This agent has no data source, so it needs an LLM key to respond at all — without one it will reply with a message asking you to configure it.') +
       ' Token usage and estimated cost appear in the <a href="#" id="gotoUsageTab">Usage</a> tab.</div>' +
-      '<div class="save-row"><button class="btn btn-primary" id="saveLlm">Save</button><span class="save-msg" id="llmMsg"></span></div></div>';
+      '<div class="save-row"><button class="btn btn-primary" id="saveLlm">Save</button><span class="save-msg" id="llmMsg"></span></div></div>' +
+      '<div class="card"><h3>Embeddings (for Knowledge Base / RAG)</h3>' +
+      '<div class="hint" style="margin-bottom:14px;">' + (detail.llm.provider === 'openai'
+        ? 'Your OpenAI key above is reused for embeddings by default — only set a key here if you want a different one specifically for embeddings.'
+        : 'Anthropic has no embeddings API, so a dedicated OpenAI key is required here for this agent\'s Knowledge Base to work at all.') + '</div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Embeddings API key (OpenAI) ' + (detail.llm.embeddingApiKeyMasked ? ('— currently: ' + detail.llm.embeddingApiKeyMasked) : '') + '</label>' +
+        '<input id="f_embeddingApiKey" type="password" placeholder="' + (detail.llm.embeddingApiKeyMasked ? 'paste to replace' : 'sk-...') + '" /></div>' +
+        '<div class="field"><label>Embedding model</label><input id="f_embeddingModel" value="' + escapeHtml(detail.llm.embeddingModel || 'text-embedding-3-small') + '" /></div>' +
+      '</div>' +
+      '<div class="status-row" style="margin:0 0 4px;">' + (detail.llm.embeddingReady
+        ? '<span class="badge badge-green">embeddings ready</span>'
+        : '<span class="badge badge-red">embeddings not configured</span>') + '</div>' +
+      '<div class="save-row"><button class="btn btn-secondary" id="saveEmbeddings">Save embeddings config</button><span class="save-msg" id="embedMsg"></span></div></div>';
 
     $('gotoUsageTab').addEventListener('click', (e) => { e.preventDefault(); currentTab = 'usage'; renderMain(detail); });
     $('saveLlm').addEventListener('click', async () => {
@@ -678,6 +701,16 @@
         $('llmMsg').textContent = 'Saved.';
         setTimeout(() => selectProject(currentSlug), 400);
       } catch (e) { $('llmMsg').textContent = e.message; $('llmMsg').style.color = 'var(--red)'; }
+    });
+    $('saveEmbeddings').addEventListener('click', async () => {
+      try {
+        const body = { embeddingModel: $('f_embeddingModel').value.trim() || 'text-embedding-3-small' };
+        const key = $('f_embeddingApiKey').value.trim();
+        if (key) body.embeddingApiKey = key;
+        await api('/projects/' + currentSlug + '/llm', { method: 'PUT', body });
+        $('embedMsg').textContent = 'Saved.';
+        setTimeout(() => selectProject(currentSlug), 400);
+      } catch (e) { $('embedMsg').textContent = e.message; $('embedMsg').style.color = 'var(--red)'; }
     });
   }
 
@@ -888,6 +921,91 @@
       } catch (e) {
         resultEl.textContent = 'Error: ' + e.message;
       }
+    });
+  }
+
+  // ---- Knowledge base (RAG) ----
+  async function renderKnowledgeTab(el, detail) {
+    el.innerHTML = '<div class="hint">Loading knowledge sources…</div>';
+    let data;
+    try {
+      data = await api('/projects/' + currentSlug + '/knowledge');
+    } catch (e) {
+      el.innerHTML = '<div class="hint">Couldn\'t load: ' + escapeHtml(e.message) + '</div>';
+      return;
+    }
+    if (currentSlug !== detail.slug) return;
+
+    const statusBadge = (s) => {
+      if (s === 'ready') return '<span class="badge badge-green">ready</span>';
+      if (s === 'indexing' || s === 'pending') return '<span class="badge badge-cyan">indexing…</span>';
+      return '<span class="badge badge-red">error</span>';
+    };
+
+    const sourceRows = data.sources.map((s) => (
+      '<div class="card" style="margin-bottom:10px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">' +
+          '<div style="min-width:0;">' +
+            '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">' +
+              '<span class="badge badge-violet">' + (s.type === 'file' ? '📄 file' : '🌐 website') + '</span>' +
+              statusBadge(s.status) +
+              (s.type === 'website' && s.pagesIndexed ? '<span class="badge badge-grey">' + s.pagesIndexed + ' page(s)</span>' : '') +
+              (s.chunkCount ? '<span class="badge badge-grey">' + s.chunkCount + ' chunks</span>' : '') +
+            '</div>' +
+            '<div class="mono" style="font-size:12px; color:#fff; word-break:break-all;">' + escapeHtml(s.name) + '</div>' +
+            (s.errorMessage ? '<div class="hint" style="color:var(--red); margin-top:4px;">' + escapeHtml(s.errorMessage) + '</div>' : '') +
+          '</div>' +
+          '<button class="btn btn-danger source-delete-btn" data-id="' + s.id + '" style="flex-shrink:0;">Delete</button>' +
+        '</div>' +
+      '</div>'
+    )).join('');
+
+    el.innerHTML =
+      '<div class="hint" style="margin-bottom:16px;">Upload documents or point at a page on your business website — this agent will retrieve relevant passages and ground its answers in them automatically. Website crawling follows same-domain links one level deep from the URL you give (up to 13 pages).</div>' +
+      (!data.embeddingReady ? '<div class="card"><div class="hint" style="color:var(--amber);">No embeddings key configured yet — set one in the <a href="#" id="gotoLlmFromKnowledge">LLM tab</a> before adding sources.</div></div>' : '') +
+      '<div class="card">' +
+        '<h3>Add a document</h3>' +
+        '<input type="file" id="knowledgeFileInput" accept=".pdf,.docx,.txt,.md" style="margin-bottom:10px;" />' +
+        '<div class="save-row"><button class="btn btn-primary" id="uploadFileBtn">Upload &amp; index</button><span class="save-msg" id="uploadMsg"></span></div>' +
+      '</div>' +
+      '<div class="card">' +
+        '<h3>Add a website URL</h3>' +
+        '<input id="websiteUrlInput" placeholder="https://yourbusiness.com" style="margin-bottom:10px;" />' +
+        '<div class="save-row"><button class="btn btn-primary" id="crawlWebsiteBtn">Crawl &amp; index</button><span class="save-msg" id="crawlMsg"></span></div>' +
+      '</div>' +
+      (data.sources.length === 0 ? '<div class="hint">No sources indexed yet.</div>' : sourceRows);
+
+    const gotoLlm = $('gotoLlmFromKnowledge');
+    if (gotoLlm) gotoLlm.addEventListener('click', (e) => { e.preventDefault(); currentTab = 'llm'; renderMain(detail); });
+
+    $('uploadFileBtn').addEventListener('click', async () => {
+      const fileInput = $('knowledgeFileInput');
+      if (!fileInput.files[0]) { $('uploadMsg').textContent = 'Choose a file first.'; return; }
+      $('uploadMsg').textContent = 'Uploading and indexing… this can take a moment.';
+      try {
+        await apiUpload('/projects/' + currentSlug + '/knowledge/upload', fileInput.files[0]);
+        $('uploadMsg').textContent = 'Indexed.';
+        renderKnowledgeTab(el, detail);
+      } catch (e) { $('uploadMsg').textContent = e.message; $('uploadMsg').style.color = 'var(--red)'; }
+    });
+
+    $('crawlWebsiteBtn').addEventListener('click', async () => {
+      const url = $('websiteUrlInput').value.trim();
+      if (!url) return;
+      $('crawlMsg').textContent = 'Crawling and indexing… this can take a moment.';
+      try {
+        await api('/projects/' + currentSlug + '/knowledge/website', { method: 'POST', body: { url } });
+        $('crawlMsg').textContent = 'Indexed.';
+        renderKnowledgeTab(el, detail);
+      } catch (e) { $('crawlMsg').textContent = e.message; $('crawlMsg').style.color = 'var(--red)'; }
+    });
+
+    document.querySelectorAll('.source-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this knowledge source? The agent will no longer use it to answer questions.')) return;
+        await api('/projects/' + currentSlug + '/knowledge/' + btn.dataset.id, { method: 'DELETE' });
+        renderKnowledgeTab(el, detail);
+      });
     });
   }
 

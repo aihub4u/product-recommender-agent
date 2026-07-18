@@ -4,6 +4,7 @@ const sessionStore = require('../sessionStore');
 const engine = require('../engines');
 const guardrails = require('../guardrails');
 const usageStore = require('../usageStore');
+const knowledgeStore = require('../knowledgeStore');
 
 const router = express.Router();
 
@@ -49,7 +50,29 @@ router.post('/:slug/recommend', async (req, res) => {
 
     const apiKey = registry.getDecryptedApiKey(project);
     const llmConfig = apiKey ? { provider: project.llmConfig.provider, apiKey, model: project.llmConfig.model } : null;
-    const systemPromptSuffix = guardrails.buildSystemPromptSuffix(project.guardrails);
+    let systemPromptSuffix = guardrails.buildSystemPromptSuffix(project.guardrails);
+
+    // Knowledge base retrieval — only meaningful when there's an LLM to
+    // synthesize an answer from the retrieved context.
+    if (llmConfig) {
+      const embeddingConfig = registry.getEmbeddingConfig(project);
+      if (embeddingConfig) {
+        try {
+          const matches = await knowledgeStore.retrieveContext({
+            slug, query: trimmedQuery, embeddingKey: embeddingConfig.apiKey, embeddingModel: embeddingConfig.model, topK: 5,
+          });
+          if (matches.length > 0) {
+            const contextBlock = matches
+              .map((m) => `[Source: ${m.sourceName}]\n${m.content}`)
+              .join('\n\n---\n\n');
+            systemPromptSuffix += `\n\nReference material from the knowledge base (use this to answer if it's relevant to what the user asked; don't mention "knowledge base" or cite sources by name to the user, just answer naturally; ignore it if it isn't relevant):\n\n${contextBlock}`;
+          }
+        } catch (err) {
+          console.error(`[publicApi] knowledge retrieval failed for '${slug}':`, err.message);
+          // proceed without knowledge context rather than failing the whole request
+        }
+      }
+    }
 
     // ---- Generic (no data source) agent: plain conversational reply ----
     if (!project.hasDataSource) {

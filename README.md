@@ -240,6 +240,39 @@ fallback behavior applies (rule engine for catalog agents, a graceful
 message for generic agents) and any pending tool call is simply not made
 for that turn.
 
+## Knowledge Base (RAG) — grounding answers in your own content
+
+Every agent now has a **Knowledge** tab. Upload documents (PDF, DOCX, TXT, MD) or give it
+a URL on your business website, and the agent retrieves relevant passages automatically
+when answering — no need to write everything into system instructions by hand.
+
+**How it works**: uploaded/crawled content is split into chunks, each chunk is converted
+to a vector via OpenAI's embeddings API, and stored. On every user message, the query
+itself is embedded and compared (cosine similarity, computed in-app rather than requiring
+the `pgvector` Postgres extension, so this works on any Postgres host) against all of that
+agent's chunks — the top 5 most relevant get quietly injected into the system prompt as
+reference material before the LLM answers. This is standard retrieval-augmented generation.
+
+**Embeddings need an OpenAI key, always** — Anthropic has no embeddings API. If an agent's
+main provider is OpenAI, that same key is reused automatically. If it's Anthropic (or none),
+the LLM tab has a separate **dedicated embeddings key** field that must be set for the
+Knowledge Base to activate; without it, uploads/crawls are rejected with a clear message
+rather than failing silently later.
+
+**Website crawling**: give it any page URL and it indexes that page plus same-domain pages
+it directly links to (shallow, one level deep, capped at 13 pages total). It respects a
+basic `robots.txt` check (a blanket `Disallow: /` blocks the whole crawl) and reuses the
+same SSRF protection built for Skills — every page fetch, including followed links, is
+independently checked against private/internal address ranges.
+
+**Re-indexing**: there's currently no automatic re-crawl schedule (unlike the Sheet catalog's
+periodic refresh) — if a website's content changes, delete the source and re-add the URL to
+re-index it. Worth building a scheduled refresh later if a client's site content changes often.
+
+**Cost/latency note**: retrieval adds one embeddings API call per user message (small,
+typically a fraction of a cent) plus a small latency cost for the similarity search — trivial
+for realistic knowledge-base sizes (hundreds to low thousands of chunks), computed in memory.
+
 ## Security notes
 
 

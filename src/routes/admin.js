@@ -1,10 +1,14 @@
 const express = require('express');
+const multer = require('multer');
 const auth = require('../auth');
 const registry = require('../projectRegistry');
 const cryptoHelper = require('../crypto');
 const usageStore = require('../usageStore');
 const { AGENT_TYPES } = require('../agentTypes');
 const { executeSkill } = require('../skillExecutor');
+const knowledgeStore = require('../knowledgeStore');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const router = express.Router();
 
@@ -81,6 +85,9 @@ router.get('/projects/:slug', (req, res) => {
       provider: entry.llmConfig.provider,
       model: entry.llmConfig.model,
       apiKeyMasked: entry.llmConfig.apiKeyEnc ? cryptoHelper.maskSecret(24) : null,
+      embeddingModel: entry.llmConfig.embeddingModel,
+      embeddingApiKeyMasked: entry.llmConfig.embeddingApiKeyEnc ? cryptoHelper.maskSecret(24) : null,
+      embeddingReady: Boolean(registry.getEmbeddingConfig(entry)),
     },
     guardrails: entry.guardrails,
   });
@@ -130,15 +137,21 @@ router.post('/projects/:slug/sheet/refresh', async (req, res) => {
 // ---- LLM config ----
 router.put('/projects/:slug/llm', async (req, res) => {
   try {
-    const { provider, apiKey, model, clearApiKey } = req.body || {};
+    const { provider, apiKey, model, clearApiKey, embeddingApiKey, embeddingModel, clearEmbeddingApiKey } = req.body || {};
     if (provider && !['none', 'openai', 'anthropic'].includes(provider)) {
       return res.status(400).json({ error: 'provider must be one of: none, openai, anthropic' });
     }
-    const updated = await registry.updateLlmConfig(req.params.slug, { provider, apiKey, model, clearApiKey });
+    const updated = await registry.updateLlmConfig(req.params.slug, {
+      provider, apiKey, model, clearApiKey, embeddingApiKey, embeddingModel, clearEmbeddingApiKey,
+    });
+    const entry = registry.getProject(req.params.slug);
     res.json({
       provider: updated.provider,
       model: updated.model,
       apiKeyMasked: updated.apiKeyEnc ? cryptoHelper.maskSecret(24) : null,
+      embeddingModel: updated.embeddingModel,
+      embeddingApiKeyMasked: updated.embeddingApiKeyEnc ? cryptoHelper.maskSecret(24) : null,
+      embeddingReady: Boolean(registry.getEmbeddingConfig(entry)),
     });
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -268,6 +281,75 @@ router.post('/projects/:slug/skills/:skillId/test', async (req, res) => {
     const authValue = registry.getDecryptedSkillAuth(skill);
     const result = await executeSkill(skill, req.body?.args || {}, authValue);
     res.json({ result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// ---- Knowledge base (RAG: files + website crawling) ----
+router.get('/projects/:slug/knowledge', async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    const sources = await knowledgeStore.listSources(entry.id);
+    const embeddingConfig = registry.getEmbeddingConfig(entry);
+    res.json({ sources, embeddingReady: Boolean(embeddingConfig) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/projects/:slug/knowledge/upload', upload.single('file'), async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+
+    const embeddingConfig = registry.getEmbeddingConfig(entry);
+    if (!embeddingConfig) {
+      return res.status(400).json({ error: "No embeddings key available. Set an OpenAI key in the LLM tab (as the main provider, or as a dedicated embeddings key) before adding knowledge sources." });
+    }
+
+    const result = await knowledgeStore.ingestFile({
+      projectId: entry.id, slug: entry.slug,
+      embeddingKey: embeddingConfig.apiKey, embeddingModel: embeddingConfig.model,
+      filename: req.file.originalname, buffer: req.file.buffer, mimeType: req.file.mimetype,
+    });
+    res.json({ source: result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/projects/:slug/knowledge/website', async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    const { url } = req.body || {};
+    if (!url) return res.status(400).json({ error: 'A URL is required.' });
+
+    const embeddingConfig = registry.getEmbeddingConfig(entry);
+    if (!embeddingConfig) {
+      return res.status(400).json({ error: "No embeddings key available. Set an OpenAI key in the LLM tab (as the main provider, or as a dedicated embeddings key) before adding knowledge sources." });
+    }
+
+    const result = await knowledgeStore.ingestWebsite({
+      projectId: entry.id, slug: entry.slug,
+      embeddingKey: embeddingConfig.apiKey, embeddingModel: embeddingConfig.model,
+      url,
+    });
+    res.json({ source: result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/projects/:slug/knowledge/:sourceId', async (req, res) => {
+  try {
+    const entry = registry.getProject(req.params.slug);
+    if (!entry) return res.status(404).json({ error: 'Project not found.' });
+    await knowledgeStore.deleteSource(entry.id, entry.slug, req.params.sourceId);
+    res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
