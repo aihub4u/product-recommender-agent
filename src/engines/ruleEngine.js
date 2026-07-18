@@ -1,5 +1,3 @@
-const config = require('../config');
-
 const PRICE_UNDER_RE = /(under|below|less than|cheaper than|within)\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i;
 const PRICE_OVER_RE = /(over|above|more than|starting from)\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i;
 const PRICE_BETWEEN_RE = /between\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:and|-|to)\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i;
@@ -100,7 +98,7 @@ function topCategories(vocabulary, limit = 5) {
  *   { action: 'clarify', question, filters }
  *   { action: 'recommend', products, filters }
  */
-function decide({ query, products, vocabulary, previousFilters }) {
+function decide({ query, products, vocabulary, previousFilters, maxRecommendations = 3 }) {
   const filters = extractFilters(query, vocabulary, previousFilters);
 
   const hasAnySignal = Boolean(filters.category || (filters.tags && filters.tags.length) || filters.price);
@@ -141,7 +139,7 @@ function decide({ query, products, vocabulary, previousFilters }) {
     }
   }
 
-  const top = matched.slice(0, config.maxRecommendations).map((m) => m.product);
+  const top = matched.slice(0, maxRecommendations).map((m) => m.product);
   return { action: 'recommend', products: top, filters };
 }
 

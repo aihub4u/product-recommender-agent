@@ -1,25 +1,29 @@
-const config = require('../config');
 const ruleEngine = require('./ruleEngine');
 const llmEngine = require('./llmEngine');
 
-const hasLlm = Boolean(config.openaiApiKey);
-
 /**
- * Runs the recommendation decision. Uses the LLM engine automatically when
- * ANTHROPIC_API_KEY is configured; otherwise uses the rule-based engine.
- * If the LLM call fails for any reason (network, bad key, parse error),
- * falls back to the rule engine so the API stays available.
+ * Runs the recommendation decision for a single project/request.
+ * Uses the LLM engine when the project has a valid provider+apiKey
+ * configured; otherwise (or on LLM failure) falls back to the rule engine
+ * so the API always returns something usable.
  */
 async function decide(context) {
+  const { llmConfig } = context;
+  const hasLlm = Boolean(llmConfig && llmConfig.provider && llmConfig.provider !== 'none' && llmConfig.apiKey);
+
   if (hasLlm) {
     try {
-      return await llmEngine.decide(context);
+      const result = await llmEngine.decide(context);
+      return { ...result, engineUsed: 'llm' };
     } catch (err) {
-      console.error('[engine] LLM engine failed, falling back to rule engine:', err.message);
-      return ruleEngine.decide(context);
+      console.error(`[engine] LLM engine failed (${llmConfig.provider}), falling back to rule engine:`, err.message);
+      const result = ruleEngine.decide(context);
+      return { ...result, engineUsed: 'rule' };
     }
   }
-  return ruleEngine.decide(context);
+
+  const result = ruleEngine.decide(context);
+  return { ...result, engineUsed: 'rule' };
 }
 
-module.exports = { decide, engineInUse: hasLlm ? 'llm' : 'rule' };
+module.exports = { decide };

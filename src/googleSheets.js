@@ -1,33 +1,49 @@
 const { google } = require('googleapis');
-const config = require('./config');
 
-let sheetsClient = null;
+// Cache one authenticated sheets client per credential source (keyFile path
+// or a stringified service account JSON), so projects sharing the default
+// service account don't re-authenticate on every refresh.
+const clientCache = new Map();
 
-async function getClient() {
-  if (sheetsClient) return sheetsClient;
-  const auth = new google.auth.GoogleAuth({
-    keyFile: config.google.keyPath,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-  });
+async function getClient({ keyFile, credentialsJson }) {
+  const cacheKey = keyFile || `json:${credentialsJson?.client_email || 'unknown'}`;
+  if (clientCache.has(cacheKey)) return clientCache.get(cacheKey);
+
+  const authOptions = { scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'] };
+  if (credentialsJson) {
+    authOptions.credentials = credentialsJson;
+  } else if (keyFile) {
+    authOptions.keyFile = keyFile;
+  } else {
+    throw new Error('No Google credentials available (neither project-specific nor default).');
+  }
+
+  const auth = new google.auth.GoogleAuth(authOptions);
   const authClient = await auth.getClient();
-  sheetsClient = google.sheets({ version: 'v4', auth: authClient });
-  return sheetsClient;
+  const client = google.sheets({ version: 'v4', auth: authClient });
+  clientCache.set(cacheKey, client);
+  return client;
 }
 
 /**
- * Reads the sheet and converts rows into product objects using the header
+ * Reads a sheet and converts rows into product objects using the header
  * row as field names. Field names are lowercased/trimmed so the sheet
- * schema is flexible (e.g. "Product Name" -> "product name").
- * A row is skipped if every cell is blank.
+ * schema is flexible.
+ *
+ * @param {object} opts
+ * @param {string} opts.sheetId
+ * @param {string} opts.range
+ * @param {string} [opts.keyFile] - path to a service account JSON file (fallback/default)
+ * @param {object} [opts.credentialsJson] - parsed service account JSON (project-specific override)
  */
-async function fetchProducts() {
-  if (!config.google.sheetId) {
-    throw new Error('GOOGLE_SHEET_ID is not set');
+async function fetchProducts({ sheetId, range, keyFile, credentialsJson }) {
+  if (!sheetId) {
+    throw new Error('No Google Sheet ID configured for this project.');
   }
-  const sheets = await getClient();
+  const sheets = await getClient({ keyFile, credentialsJson });
   const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: config.google.sheetId,
-    range: config.google.range,
+    spreadsheetId: sheetId,
+    range: range || 'Sheet1',
   });
 
   const rows = res.data.values || [];
@@ -46,11 +62,8 @@ async function fetchProducts() {
       product[header] = row[idx] !== undefined ? String(row[idx]).trim() : '';
     });
 
-    // Normalize a stable id: use an explicit "id" column if present,
-    // otherwise fall back to the row number.
     product.id = product.id || `row-${i + 1}`;
 
-    // Normalize price to a number if parseable, kept alongside raw string.
     if (product.price !== undefined && product.price !== '') {
       const numeric = parseFloat(String(product.price).replace(/[^0-9.]/g, ''));
       product.priceValue = Number.isFinite(numeric) ? numeric : null;
@@ -58,11 +71,7 @@ async function fetchProducts() {
       product.priceValue = null;
     }
 
-    // Normalize tags/category into an array for matching, tolerant of
-    // comma or pipe separated values.
-    const tagSource = [product.tags, product.category, product.type]
-      .filter(Boolean)
-      .join(',');
+    const tagSource = [product.tags, product.category, product.type].filter(Boolean).join(',');
     product.tagList = tagSource
       .split(/[,|]/)
       .map((t) => t.trim().toLowerCase())

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Agent Platform — Admin</title>
+<style>
+  :root {
+    --ink: #16181d;
+    --ink-soft: #5b6270;
+    --line: #e4e6eb;
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --accent: #4f46e5;
+    --accent-hover: #4338ca;
+    --accent-soft: #eef0ff;
+    --green: #16a34a;
+    --red: #dc2626;
+    --amber: #d97706;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+  input, textarea, select {
+    font-family: inherit; font-size: 13.5px; padding: 8px 10px;
+    border: 1px solid var(--line); border-radius: 8px; width: 100%; outline: none;
+    background: #fff; color: var(--ink);
+  }
+  input:focus, textarea:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  label { font-size: 12px; font-weight: 600; color: var(--ink-soft); display: block; margin-bottom: 5px; }
+  .field { margin-bottom: 14px; }
+  .hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; line-height: 1.4; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px;
+    border-radius: 8px; border: 1px solid transparent; font-weight: 600; font-size: 13px;
+  }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: var(--accent-hover); }
+  .btn-secondary { background: #fff; border-color: var(--line); color: var(--ink); }
+  .btn-secondary:hover { background: #f3f4f6; }
+  .btn-danger { background: #fff; border-color: #fca5a5; color: var(--red); }
+  .btn-danger:hover { background: #fef2f2; }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  #app { display: none; }
+  #loginScreen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  }
+  .login-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    padding: 36px 32px; width: 340px; box-shadow: 0 10px 40px rgba(0,0,0,0.06);
+  }
+  .login-card h1 { font-size: 18px; margin: 0 0 4px; }
+  .login-card p { font-size: 12.5px; color: var(--ink-soft); margin: 0 0 20px; }
+  .error-text { color: var(--red); font-size: 12.5px; margin-top: 8px; min-height: 16px; }
+
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 260px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; padding: 18px 14px;
+  }
+  .brand { font-weight: 700; font-size: 15px; padding: 0 8px 16px; display: flex; align-items: center; gap: 8px; }
+  .brand-badge { width: 26px; height: 26px; border-radius: 7px; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; }
+  .project-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; }
+  .project-item {
+    padding: 9px 10px; border-radius: 8px; cursor: pointer; font-size: 13.3px; font-weight: 500;
+    display: flex; align-items: center; justify-content: space-between; color: var(--ink-soft);
+  }
+  .project-item:hover { background: #f3f4f6; }
+  .project-item.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .dot.green { background: var(--green); } .dot.amber { background: var(--amber); } .dot.grey { background: #c7cad1; }
+  .sidebar-footer { padding-top: 12px; border-top: 1px solid var(--line); margin-top: 10px; }
+
+  .main { flex: 1; padding: 28px 36px; max-width: 900px; }
+  .empty-state { color: var(--ink-soft); padding: 60px 0; text-align: center; }
+
+  .project-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .project-header h1 { font-size: 21px; margin: 0; }
+  .slug-tag { font-family: ui-monospace, monospace; font-size: 12px; color: var(--ink-soft); background: #f3f4f6; padding: 2px 7px; border-radius: 5px; }
+  .status-row { display: flex; gap: 8px; margin: 10px 0 22px; flex-wrap: wrap; }
+  .badge { font-size: 11.5px; font-weight: 600; padding: 4px 9px; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; }
+  .badge-grey { background: #f0f1f3; color: var(--ink-soft); }
+  .badge-green { background: #ecfdf3; color: var(--green); }
+  .badge-red { background: #fef2f2; color: var(--red); }
+  .badge-indigo { background: var(--accent-soft); color: var(--accent); }
+
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 22px; }
+  .tab { padding: 9px 4px; margin-right: 20px; font-size: 13.5px; font-weight: 600; color: var(--ink-soft); cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card h3 { font-size: 13.5px; margin: 0 0 14px; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .save-row { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+  .save-msg { font-size: 12px; color: var(--green); }
+  textarea { resize: vertical; min-height: 70px; }
+
+  .deploy-box { background: #0f1117; color: #e5e7eb; border-radius: 8px; padding: 12px 14px; font-family: ui-monospace, monospace; font-size: 12px; margin-bottom: 8px; word-break: break-all; }
+  .deploy-label { font-size: 11px; color: var(--ink-soft); margin: 12px 0 4px; font-weight: 600; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .modal-overlay.show { display: flex; }
+  .modal-card { background: #fff; border-radius: 12px; padding: 20px; width: 340px; }
+  .modal-card h3 { margin: 0 0 14px; font-size: 15px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <h1>Agent Platform</h1>
+    <p>Sign in to manage product recommendation agents.</p>
+    <div class="field">
+      <label>Admin password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" />
+    </div>
+    <button class="btn btn-primary" id="loginBtn" style="width:100%; justify-content:center;">Sign in</button>
+    <div class="error-text" id="loginError"></div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="layout">
+    <div class="sidebar">
+      <div class="brand"><div class="brand-badge">AP</div> Agent Platform</div>
+      <div class="project-list" id="projectList"></div>
+      <div class="sidebar-footer">
+        <button class="btn btn-secondary" id="newProjectBtn" style="width:100%; justify-content:center;">+ New Project</button>
+        <button class="btn btn-secondary" id="logoutBtn" style="width:100%; justify-content:center; margin-top:8px;">Log out</button>
+      </div>
+    </div>
+    <div class="main" id="main">
+      <div class="empty-state">Select a project, or create a new one.</div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="newProjectModal">
+  <div class="modal-card">
+    <h3>New project</h3>
+    <div class="field">
+      <label>Project name</label>
+      <input id="newProjectName" placeholder="e.g. Manyavar Store" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelNewProject">Cancel</button>
+      <button class="btn btn-primary" id="confirmNewProject">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal-card">
+    <h3>Delete this project?</h3>
+    <p style="font-size:13px; color:var(--ink-soft); margin:0 0 6px;">This permanently removes its config, sheet link, and stored keys. This can't be undone.</p>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelDelete">Cancel</button>
+      <button class="btn btn-danger" id="confirmDelete">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const API = '/api/admin';
+  let projects = [];
+  let currentSlug = null;
+  let currentTab = 'sheet';
+  let currentDetail = null;
+
+  const $ = (id) => document.getElementById(id);
+
+  async function api(path, opts = {}) {
+    const res = await fetch(API + path, {
+      method: opts.method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
+  // ---- Auth ----
+  async function checkAuth() {
+    try {
+      await api('/me');
+      showApp();
+    } catch (e) {
+      showLogin();
+    }
+  }
+
+  function showLogin() {
+    $('loginScreen').style.display = 'flex';
+    $('app').style.display = 'none';
+  }
+  function showApp() {
+    $('loginScreen').style.display = 'none';
+    $('app').style.display = 'block';
+    loadProjects();
+  }
+
+  $('loginBtn').addEventListener('click', async () => {
+    $('loginError').textContent = '';
+    try {
+      await api('/login', { method: 'POST', body: { password: $('loginPassword').value } });
+      showApp();
+    } catch (e) {
+      $('loginError').textContent = e.message;
+    }
+  });
+  $('loginPassword').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('loginBtn').click(); });
+  $('logoutBtn').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); showLogin(); });
+
+  // ---- Projects list ----
+  async function loadProjects() {
+    const data = await api('/projects');
+    projects = data.projects;
+    renderProjectList();
+    if (currentSlug && projects.find((p) => p.slug === currentSlug)) {
+      selectProject(currentSlug);
+    } else if (projects.length) {
+      selectProject(projects[0].slug);
+    } else {
+      $('main').innerHTML = '<div class="empty-state">No projects yet — create one to get started.</div>';
+    }
+  }
+
+  function renderProjectList() {
+    const list = $('projectList');
+    list.innerHTML = '';
+    projects.forEach((p) => {
+      const item = document.createElement('div');
+      item.className = 'project-item' + (p.slug === currentSlug ? ' active' : '');
+      const dotClass = p.lastRefreshError ? 'amber' : (p.productsLoaded > 0 ? 'green' : 'grey');
+      item.innerHTML = `<span>${escapeHtml(p.name)}</span><span class="dot ${dotClass}"></span>`;
+      item.addEventListener('click', () => selectProject(p.slug));
+      list.appendChild(item);
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  async function selectProject(slug) {
+    currentSlug = slug;
+    currentTab = 'sheet';
+    renderProjectList();
+    const detail = await api(`/projects/${slug}`);
+    currentDetail = detail;
+    renderMain(detail);
+  }
+
+  // ---- New project ----
+  $('newProjectBtn').addEventListener('click', () => { $('newProjectName').value = ''; $('newProjectModal').classList.add('show'); });
+  $('cancelNewProject').addEventListener('click', () => $('newProjectModal').classList.remove('show'));
+  $('confirmNewProject').addEventListener('click', async () => {
+    const name = $('newProjectName').value.trim();
+    if (!name) return;
+    const { project } = await api('/projects', { method: 'POST', body: { name } });
+    $('newProjectModal').classList.remove('show');
+    await loadProjects();
+    selectProject(project.slug);
+  });
+
+  // ---- Delete project ----
+  function confirmDeleteProject() { $('deleteModal').classList.add('show'); }
+  $('cancelDelete').addEventListener('click', () => $('deleteModal').classList.remove('show'));
+  $('confirmDelete').addEventListener('click', async () => {
+    await api(`/projects/${currentSlug}`, { method: 'DELETE' });
+    $('deleteModal').classList.remove('show');
+    currentSlug = null;
+    await loadProjects();
+  });
+
+  // ---- Main panel ----
+  function renderMain(detail) {
+    const engineBadge = detail.llm.provider !== 'none' && detail.llm.apiKeyMasked
+      ? `<span class="badge badge-indigo">${detail.llm.provider}</span>`
+      : `<span class="badge badge-grey">rule engine</span>`;
+    const productsBadge = detail.productsLoaded > 0
+      ? `<span class="badge badge-green">${detail.productsLoaded} products loaded</span>`
+      : `<span class="badge badge-red">no products loaded</span>`;
+    const errorBadge = detail.lastRefreshError ? `<span class="badge badge-red">${escapeHtml(detail.lastRefreshError)}</span>` : '';
+
+    $('main').innerHTML = `
+      <div class="project-header">
+        <h1>${escapeHtml(detail.name)}</h1>
+        <span class="slug-tag">${detail.slug}</span>
+      </div>
+      <div class="status-row">${productsBadge} ${engineBadge} ${errorBadge}</div>
+      <div class="tabs">
+        <div class="tab" data-tab="sheet">Sheet</div>
+        <div class="tab" data-tab="llm">LLM</div>
+        <div class="tab" data-tab="guardrails">Guardrails</div>
+        <div class="tab" data-tab="deploy">Test &amp; Deploy</div>
+      </div>
+      <div id="tabContent"></div>
+    `;
+
+    document.querySelectorAll('.tab').forEach((t) => {
+      t.classList.toggle('active', t.dataset.tab === currentTab);
+      t.addEventListener('click', () => { currentTab = t.dataset.tab; renderMain(detail); });
+    });
+
+    const content = $('tabContent');
+    if (currentTab === 'sheet') renderSheetTab(content, detail);
+    else if (currentTab === 'llm') renderLlmTab(content, detail);
+    else if (currentTab === 'guardrails') renderGuardrailsTab(content, detail);
+    else renderDeployTab(content, detail);
+  }
+
+  function renderSheetTab(el, detail) {
+    el.innerHTML = `
+      <div class="card">
+        <h3>Google Sheet source</h3>
+        <div class="field">
+          <label>Google Sheet ID</label>
+          <input id="f_sheetId" value="${escapeHtml(detail.sheet.sheetId)}" placeholder="the long id from the sheet's URL" />
+        </div>
+        <div class="row-2">
+          <div class="field">
+            <label>Sheet / tab name</label>
+            <input id="f_range" value="${escapeHtml(detail.sheet.range)}" placeholder="Sheet1" />
+          </div>
+          <div class="field">
+            <label>Refresh interval (ms)</label>
+            <input id="f_refreshMs" type="number" value="${detail.sheet.catalogRefreshMs}" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Service account JSON ${detail.sheet.hasCustomServiceAccount ? '(custom key saved — paste to replace)' : '(optional — leave blank to use the server default)'}</label>
+          <textarea id="f_serviceAccount" placeholder='{"type":"service_account", ...}'></textarea>
+          <div class="hint">Only needed if this project's sheet is shared with a different service account than the platform default.</div>
+        </div>
+        <div class="save-row">
+          <button class="btn btn-primary" id="saveSheet">Save sheet config</button>
+          <button class="btn btn-secondary" id="refreshCatalog">Refresh now</button>
+          <span class="save-msg" id="sheetMsg"></span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Danger zone</h3>
+        <button class="btn btn-danger" id="deleteProjectBtn">Delete this project</button>
+      </div>
+    `;
+    $('saveSheet').addEventListener('click', async () => {
+      try {
+        await api(`/projects/${currentSlug}/sheet`, {
+          method: 'PUT',
+          body: {
+            sheetId: $('f_sheetId').value.trim(),
+            range: $('f_range').value.trim() || 'Sheet1',
+            catalogRefreshMs: parseInt($('f_refreshMs').value, 10) || 300000,
+            serviceAccountJson: $('f_serviceAccount').value.trim() || undefined,
+          },
+        });
+        $('sheetMsg').textContent = 'Saved.';
+        setTimeout(() => selectProject(currentSlug), 400);
+      } catch (e) { $('sheetMsg').textContent = e.message; $('sheetMsg').style.color = 'var(--red)'; }
+    });
+    $('refreshCatalog').addEventListener('click', async () => {
+      $('sheetMsg').textContent = 'Refreshing…';
+      try {
+        const r = await api(`/projects/${currentSlug}/sheet/refresh`, { method: 'POST' });
+        $('sheetMsg').textContent = r.lastRefreshError ? `Error: ${r.lastRefreshError}` : `Loaded ${r.productsLoaded} products.`;
+        loadProjects();
+      } catch (e) { $('sheetMsg').textContent = e.message; }
+    });
+    $('deleteProjectBtn').addEventListener('click', confirmDeleteProject);
+  }
+
+  function renderLlmTab(el, detail) {
+    el.innerHTML = `
+      <div class="card">
+        <h3>LLM engine</h3>
+        <div class="row-2">
+          <div class="field">
+            <label>Provider</label>
+            <select id="f_provider">
+              <option value="none" ${detail.llm.provider === 'none' ? 'selected' : ''}>None (rule-based only)</option>
+              <option value="openai" ${detail.llm.provider === 'openai' ? 'selected' : ''}>OpenAI</option>
+              <option value="anthropic" ${detail.llm.provider === 'anthropic' ? 'selected' : ''}>Anthropic</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Model (optional)</label>
+            <input id="f_model" value="${escapeHtml(detail.llm.model || '')}" placeholder="e.g. gpt-5.4-mini or claude-sonnet-5" />
+          </div>
+        </div>
+        <div class="field">
+          <label>API key ${detail.llm.apiKeyMasked ? `— currently: ${detail.llm.apiKeyMasked}` : ''}</label>
+          <input id="f_apiKey" type="password" placeholder="${detail.llm.apiKeyMasked ? 'paste to replace' : 'sk-... / sk-ant-...'}" />
+        </div>
+        <div class="hint">If no key is set, this project's agent uses the built-in rule-based engine automatically — it never fails or goes offline for lack of an LLM key.</div>
+        <div class="save-row">
+          <button class="btn btn-primary" id="saveLlm">Save LLM config</button>
+          <span class="save-msg" id="llmMsg"></span>
+        </div>
+      </div>
+    `;
+    $('saveLlm').addEventListener('click', async () => {
+      try {
+        const body = { provider: $('f_provider').value, model: $('f_model').value.trim() };
+        const key = $('f_apiKey').value.trim();
+        if (key) body.apiKey = key;
+        await api(`/projects/${currentSlug}/llm`, { method: 'PUT', body });
+        $('llmMsg').textContent = 'Saved.';
+        setTimeout(() => selectProject(currentSlug), 400);
+      } catch (e) { $('llmMsg').textContent = e.message; $('llmMsg').style.color = 'var(--red)'; }
+    });
+  }
+
+  function renderGuardrailsTab(el, detail) {
+    const g = detail.guardrails;
+    el.innerHTML = `
+      <div class="card">
+        <h3>Behavior instructions</h3>
+        <div class="field">
+          <label>Extra system instructions</label>
+          <textarea id="f_sysInstr" placeholder="e.g. Never discuss competitor brands. Keep a warm, formal tone.">${escapeHtml(g.systemInstructions || '')}</textarea>
+          <div class="hint">Appended to the LLM's system prompt. Only applies when an LLM key is configured.</div>
+        </div>
+        <div class="field">
+          <label>Blocked terms (comma-separated)</label>
+          <input id="f_blocked" value="${escapeHtml((g.blockedTerms || []).join(', '))}" placeholder="e.g. refund, competitor, discount code" />
+          <div class="hint">If a query contains any of these, the agent skips recommending and replies with the off-topic message below instead — works even without an LLM key.</div>
+        </div>
+        <div class="field">
+          <label>Off-topic / blocked reply message</label>
+          <input id="f_offTopic" value="${escapeHtml(g.offTopicMessage || '')}" />
+        </div>
+      </div>
+      <div class="card">
+        <h3>Limits</h3>
+        <div class="row-2">
+          <div class="field">
+            <label>Min price</label>
+            <input id="f_minPrice" type="number" value="${g.minPrice ?? ''}" placeholder="no minimum" />
+          </div>
+          <div class="field">
+            <label>Max price</label>
+            <input id="f_maxPrice" type="number" value="${g.maxPrice ?? ''}" placeholder="no maximum" />
+          </div>
+        </div>
+        <div class="field">
+          <label>Max recommendations per reply (1-5)</label>
+          <input id="f_maxRec" type="number" min="1" max="5" value="${g.maxRecommendations || 3}" />
+        </div>
+        <div class="save-row">
+          <button class="btn btn-primary" id="saveGuardrails">Save guardrails</button>
+          <span class="save-msg" id="guardMsg"></span>
+        </div>
+      </div>
+    `;
+    $('saveGuardrails').addEventListener('click', async () => {
+      try {
+        await api(`/projects/${currentSlug}/guardrails`, {
+          method: 'PUT',
+          body: {
+            systemInstructions: $('f_sysInstr').value.trim(),
+            blockedTerms: $('f_blocked').value,
+            minPrice: $('f_minPrice').value === '' ? null : Number($('f_minPrice').value),
+            maxPrice: $('f_maxPrice').value === '' ? null : Number($('f_maxPrice').value),
+            maxRecommendations: Number($('f_maxRec').value) || 3,
+            offTopicMessage: $('f_offTopic').value.trim(),
+          },
+        });
+        $('guardMsg').textContent = 'Saved.';
+      } catch (e) { $('guardMsg').textContent = e.message; $('guardMsg').style.color = 'var(--red)'; }
+    });
+  }
+
+  function renderDeployTab(el, detail) {
+    const origin = window.location.origin;
+    el.innerHTML = `
+      <div class="card">
+        <h3>API endpoints</h3>
+        <div class="deploy-label">Recommend (POST)</div>
+        <div class="deploy-box">${origin}/api/${detail.slug}/recommend</div>
+        <div class="deploy-label">Health (GET)</div>
+        <div class="deploy-box">${origin}/api/${detail.slug}/health</div>
+        <div class="hint">POST body: <code>{"query": "...", "sessionId": "optional"}</code></div>
+      </div>
+      <div class="card">
+        <h3>Test it live</h3>
+        <p class="hint" style="margin-bottom:12px;">Opens a WhatsApp-style chat wired to this project's API.</p>
+        <a class="btn btn-primary" href="/chat/${detail.slug}" target="_blank">Open test chat ↗</a>
+      </div>
+    `;
+  }
+
+  checkAuth();
+})();
+</script>
+
+</body>
+</html>

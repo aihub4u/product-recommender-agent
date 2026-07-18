@@ -1,12 +1,5 @@
-const config = require('../config');
 const ruleEngine = require('./ruleEngine');
 
-const MODEL = process.env.OPENAI_MODEL || 'gpt-5.4-mini';
-
-// Keep the catalog sent to the LLM small: pre-filter with the rule engine's
-// keyword/tag matching so we're not shipping the entire sheet as tokens on
-// every request. Falls back to the first N products if pre-filtering
-// yields too few candidates (e.g. very first, very vague turn).
 function buildCandidateList(query, products, vocabulary, previousFilters) {
   const filters = ruleEngine.extractFilters(query, vocabulary, previousFilters);
   const scored = products
@@ -29,43 +22,51 @@ function condenseProduct(p) {
   };
 }
 
-const SYSTEM_PROMPT = `You are a product recommendation assistant embedded in an API. You are given:
+function buildSystemPrompt(maxRecommendations, systemPromptSuffix) {
+  let prompt = `You are a product recommendation assistant embedded in an API. You are given:
 - A conversation history with the user
 - A candidate product catalog (subset of a larger store, already loosely relevant)
 
-Your job: either ask ONE short, specific clarifying question if the user's request is too vague or ambiguous to confidently recommend from, OR recommend up to 3 products from the given catalog that best match what they want.
+Your job: either ask ONE short, specific clarifying question if the user's request is too vague or ambiguous to confidently recommend from, OR recommend up to ${maxRecommendations} products from the given catalog that best match what they want.
 
 Rules:
 - Only recommend products that appear in the given catalog (use their exact "id").
-- Prefer recommending over asking again and again — only ask a clarifying question if you genuinely cannot narrow down to good options (e.g. no category/price/preference signal, or the catalog has many equally plausible matches).
+- Prefer recommending over asking again and again — only ask a clarifying question if you genuinely cannot narrow down to good options.
 - Never invent products or ids that are not in the catalog.
 - Respond with ONLY raw JSON, no markdown fences, no preamble, matching exactly one of these shapes:
   {"action": "clarify", "question": "..."}
-  {"action": "recommend", "productIds": ["id1", "id2", "id3"], "reasoning": "one short sentence"}`;
+  {"action": "recommend", "productIds": ["id1", "id2"], "reasoning": "one short sentence"}`;
 
-async function decide({ query, products, vocabulary, previousFilters, history }) {
-  const candidates = buildCandidateList(query, products, vocabulary, previousFilters).map(condenseProduct);
+  if (systemPromptSuffix) {
+    prompt += `\n\n${systemPromptSuffix}`;
+  }
+  return prompt;
+}
 
+function buildUserMessage(query, history, candidates) {
   const conversation = (history || [])
     .map((turn) => `${turn.role === 'user' ? 'User' : 'Assistant'}: ${turn.content}`)
     .join('\n');
-
-  const userMessage = [
+  return [
     conversation ? `Conversation so far:\n${conversation}\n` : '',
     `Latest user message: ${query}`,
     `\nCandidate catalog (JSON):\n${JSON.stringify(candidates)}`,
   ].join('\n');
+}
 
+function parseModelJson(rawText) {
+  const cleaned = rawText.replace(/```json|```/g, '').trim();
+  return JSON.parse(cleaned);
+}
+
+async function callOpenAI({ apiKey, model, systemPrompt, userMessage }) {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.openaiApiKey}`,
-    },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
-      model: MODEL,
+      model: model || 'gpt-5.4-mini',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userMessage },
       ],
       response_format: { type: 'json_object' },
@@ -73,17 +74,58 @@ async function decide({ query, products, vocabulary, previousFilters, history })
       max_completion_tokens: 500,
     }),
   });
-
   if (!response.ok) {
     const errBody = await response.text().catch(() => '');
     throw new Error(`OpenAI API error ${response.status}: ${errBody.slice(0, 300)}`);
   }
-
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('OpenAI returned no message content');
+  return parseModelJson(content);
+}
 
-  const parsed = JSON.parse(content);
+async function callAnthropic({ apiKey, model, systemPrompt, userMessage }) {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: model || 'claude-sonnet-5',
+      max_tokens: 500,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  });
+  if (!response.ok) {
+    const errBody = await response.text().catch(() => '');
+    throw new Error(`Anthropic API error ${response.status}: ${errBody.slice(0, 300)}`);
+  }
+  const data = await response.json();
+  const textBlock = (data.content || []).find((b) => b.type === 'text');
+  if (!textBlock) throw new Error('Anthropic returned no text content');
+  return parseModelJson(textBlock.text);
+}
+
+async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '' }) {
+  if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
+    throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
+  }
+
+  const candidates = buildCandidateList(query, products, vocabulary, previousFilters).map(condenseProduct);
+  const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix);
+  const userMessage = buildUserMessage(query, history, candidates);
+
+  let parsed;
+  if (llmConfig.provider === 'openai') {
+    parsed = await callOpenAI({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
+  } else if (llmConfig.provider === 'anthropic') {
+    parsed = await callAnthropic({ apiKey: llmConfig.apiKey, model: llmConfig.model, systemPrompt, userMessage });
+  } else {
+    throw new Error(`Unsupported LLM provider: ${llmConfig.provider}`);
+  }
 
   if (parsed.action === 'clarify') {
     return { action: 'clarify', question: parsed.question, filters: previousFilters || {} };
@@ -94,10 +136,9 @@ async function decide({ query, products, vocabulary, previousFilters, history })
     const resolved = (parsed.productIds || [])
       .map((id) => byId.get(id))
       .filter(Boolean)
-      .slice(0, config.maxRecommendations);
+      .slice(0, maxRecommendations);
 
     if (resolved.length === 0) {
-      // LLM claimed a recommendation but ids didn't resolve — fall back safely.
       throw new Error('LLM recommended ids not present in catalog');
     }
 
