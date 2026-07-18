@@ -1,5 +1,6 @@
 const ruleEngine = require('./ruleEngine');
-const { callProvider, parseModelJson } = require('./providers');
+const { parseModelJson } = require('./providers');
+const { runWithTools } = require('./toolLoop');
 
 function buildCandidateList(query, products, vocabulary, previousFilters) {
   const filters = ruleEngine.extractFilters(query, vocabulary, previousFilters);
@@ -61,7 +62,7 @@ function buildUserMessage(query, history, candidates) {
   ].join('\n');
 }
 
-async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '' }) {
+async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [] }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
   }
@@ -70,9 +71,9 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
   const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix);
   const userMessage = buildUserMessage(query, history, candidates);
 
-  const { rawText, usage } = await callProvider({
+  const { rawText, usage } = await runWithTools({
     provider: llmConfig.provider, apiKey: llmConfig.apiKey, model: llmConfig.model,
-    systemPrompt, userMessage, jsonMode: true,
+    systemPrompt, userMessage, skills, jsonMode: true,
   });
   const parsed = parseModelJson(rawText);
 

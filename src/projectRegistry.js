@@ -3,6 +3,24 @@ const cryptoHelper = require('./crypto');
 const googleSheets = require('./googleSheets');
 const globalConfig = require('./globalConfig');
 
+function rowToSkill(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    method: row.method || 'GET',
+    url: row.url,
+    headers: (() => { try { return JSON.parse(row.headers_json || '{}'); } catch (e) { return {}; } })(),
+    authType: row.auth_type || 'none',
+    authHeaderName: row.auth_header_name || '',
+    authValueEnc: row.auth_value_enc || null,
+    hasAuthValue: Boolean(row.auth_value_enc),
+    params: (() => { try { return JSON.parse(row.params_json || '[]'); } catch (e) { return []; } })(),
+    bodyTemplate: row.body_template || '',
+    enabled: row.enabled !== false,
+  };
+}
+
 // slug -> { id, name, slug, sheetConfig, llmConfig, guardrails, products, vocabulary,
 //           lastRefreshed, lastRefreshError, nextRefreshAt }
 const cache = new Map();
@@ -81,10 +99,11 @@ function rowToGuardrails(row) {
 }
 
 async function loadProjectIntoCache(projectRow) {
-  const [sheetRes, llmRes, guardrailsRes] = await Promise.all([
+  const [sheetRes, llmRes, guardrailsRes, skillsRes] = await Promise.all([
     db.query('SELECT * FROM project_sheet_config WHERE project_id = $1', [projectRow.id]),
     db.query('SELECT * FROM project_llm_config WHERE project_id = $1', [projectRow.id]),
     db.query('SELECT * FROM project_guardrails WHERE project_id = $1', [projectRow.id]),
+    db.query('SELECT * FROM project_skills WHERE project_id = $1 ORDER BY created_at ASC', [projectRow.id]),
   ]);
 
   const entry = {
@@ -96,6 +115,7 @@ async function loadProjectIntoCache(projectRow) {
     sheetConfig: rowToSheetConfig(sheetRes.rows[0]),
     llmConfig: rowToLlmConfig(llmRes.rows[0]),
     guardrails: rowToGuardrails(guardrailsRes.rows[0]),
+    skills: skillsRes.rows.map(rowToSkill),
     products: [],
     vocabulary: { tags: new Set(), categories: new Set() },
     lastRefreshed: null,
@@ -298,6 +318,98 @@ function getDecryptedApiKey(entry) {
   return cryptoHelper.decrypt(entry.llmConfig.apiKeyEnc);
 }
 
+// ---- Skills (external API tools) ----
+const VALID_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const VALID_AUTH_TYPES = new Set(['none', 'bearer', 'api_key_header']);
+
+function validateSkillInput({ name, description, url, method, authType, authHeaderName }) {
+  if (!name || !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(name)) {
+    throw new Error('Skill name must be a short identifier (letters, numbers, underscore, starting with a letter) — this is what the model calls it internally.');
+  }
+  if (!description || description.trim().length < 10) {
+    throw new Error("Description is required and should clearly explain when to use this skill — it's the only signal the model has for deciding to call it.");
+  }
+  if (!url) throw new Error('URL is required.');
+  if (method && !VALID_METHODS.has(method.toUpperCase())) throw new Error(`Method must be one of: ${[...VALID_METHODS].join(', ')}`);
+  if (authType && !VALID_AUTH_TYPES.has(authType)) throw new Error(`authType must be one of: ${[...VALID_AUTH_TYPES].join(', ')}`);
+  if (authType === 'api_key_header' && !authHeaderName) throw new Error('authHeaderName is required when authType is api_key_header.');
+}
+
+async function listSkills(slug) {
+  const entry = getProject(slug);
+  if (!entry) throw new Error('Project not found');
+  return entry.skills;
+}
+
+async function createSkill(slug, input) {
+  const entry = getProject(slug);
+  if (!entry) throw new Error('Project not found');
+  validateSkillInput(input);
+
+  const authValueEnc = input.authValue ? cryptoHelper.encrypt(input.authValue) : null;
+  const { rows } = await db.query(
+    `INSERT INTO project_skills
+       (project_id, name, description, method, url, headers_json, auth_type, auth_header_name, auth_value_enc, params_json, body_template, enabled)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+    [
+      entry.id, input.name, input.description, (input.method || 'GET').toUpperCase(), input.url,
+      JSON.stringify(input.headers || {}), input.authType || 'none', input.authHeaderName || null,
+      authValueEnc, JSON.stringify(input.params || []), input.bodyTemplate || null, input.enabled !== false,
+    ]
+  );
+  const skill = rowToSkill(rows[0]);
+  entry.skills.push(skill);
+  return skill;
+}
+
+async function updateSkill(slug, skillId, input) {
+  const entry = getProject(slug);
+  if (!entry) throw new Error('Project not found');
+  const existing = entry.skills.find((s) => s.id === skillId);
+  if (!existing) throw new Error('Skill not found');
+  validateSkillInput({ ...existing, ...input });
+
+  const fields = [];
+  const values = [];
+  let i = 1;
+  const set = (col, val) => { fields.push(`${col} = $${i++}`); values.push(val); };
+
+  if (input.name !== undefined) set('name', input.name);
+  if (input.description !== undefined) set('description', input.description);
+  if (input.method !== undefined) set('method', input.method.toUpperCase());
+  if (input.url !== undefined) set('url', input.url);
+  if (input.headers !== undefined) set('headers_json', JSON.stringify(input.headers || {}));
+  if (input.authType !== undefined) set('auth_type', input.authType);
+  if (input.authHeaderName !== undefined) set('auth_header_name', input.authHeaderName || null);
+  if (input.authValue) set('auth_value_enc', cryptoHelper.encrypt(input.authValue));
+  if (input.clearAuthValue) { fields.push(`auth_value_enc = NULL`); }
+  if (input.params !== undefined) set('params_json', JSON.stringify(input.params || []));
+  if (input.bodyTemplate !== undefined) set('body_template', input.bodyTemplate || null);
+  if (input.enabled !== undefined) set('enabled', input.enabled);
+  fields.push(`updated_at = now()`);
+
+  values.push(entry.id, skillId);
+  await db.query(`UPDATE project_skills SET ${fields.join(', ')} WHERE project_id = $${i++} AND id = $${i}`, values);
+
+  const { rows } = await db.query('SELECT * FROM project_skills WHERE id = $1', [skillId]);
+  const updated = rowToSkill(rows[0]);
+  entry.skills = entry.skills.map((s) => (s.id === skillId ? updated : s));
+  return updated;
+}
+
+async function deleteSkill(slug, skillId) {
+  const entry = getProject(slug);
+  if (!entry) throw new Error('Project not found');
+  await db.query('DELETE FROM project_skills WHERE project_id = $1 AND id = $2', [entry.id, skillId]);
+  entry.skills = entry.skills.filter((s) => s.id !== skillId);
+  return true;
+}
+
+function getDecryptedSkillAuth(skill) {
+  if (!skill.authValueEnc) return null;
+  return cryptoHelper.decrypt(skill.authValueEnc);
+}
+
 module.exports = {
   loadAllProjects,
   listProjects,
@@ -310,4 +422,9 @@ module.exports = {
   refreshCatalog,
   startAutoRefresh,
   getDecryptedApiKey,
+  listSkills,
+  createSkill,
+  updateSkill,
+  deleteSkill,
+  getDecryptedSkillAuth,
 };

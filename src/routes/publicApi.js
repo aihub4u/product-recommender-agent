@@ -62,6 +62,7 @@ router.post('/:slug/recommend', async (req, res) => {
         agentType: project.agentType,
         systemPromptSuffix,
         hasDataSource: false,
+        skills: project.skills,
       });
 
       logIfLlm(project, result);
@@ -91,6 +92,7 @@ router.post('/:slug/recommend', async (req, res) => {
       maxRecommendations,
       systemPromptSuffix,
       hasDataSource: true,
+      skills: project.skills,
     });
 
     session.filters = result.filters || session.filters;

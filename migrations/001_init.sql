@@ -59,4 +59,24 @@ CREATE TABLE IF NOT EXISTS usage_logs (
 CREATE INDEX IF NOT EXISTS idx_usage_logs_project ON usage_logs(project_id);
 CREATE INDEX IF NOT EXISTS idx_usage_logs_created ON usage_logs(created_at);
 
+CREATE TABLE IF NOT EXISTS project_skills (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL,
+  method TEXT DEFAULT 'GET',
+  url TEXT NOT NULL,
+  headers_json TEXT DEFAULT '{}',
+  auth_type TEXT DEFAULT 'none',
+  auth_header_name TEXT,
+  auth_value_enc TEXT,
+  params_json TEXT DEFAULT '[]',
+  body_template TEXT,
+  enabled BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_project_skills_project ON project_skills(project_id);
+
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);

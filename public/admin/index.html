@@ -587,7 +587,7 @@
 
     const tabs = [];
     if (detail.hasDataSource) tabs.push(['sheet', 'Data Source']);
-    tabs.push(['llm', 'LLM'], ['guardrails', 'Guardrails'], ['usage', 'Usage'], ['deploy', 'Test & Deploy']);
+    tabs.push(['llm', 'LLM'], ['skills', 'Skills'], ['guardrails', 'Guardrails'], ['usage', 'Usage'], ['deploy', 'Test & Deploy']);
 
     $('main').innerHTML =
       '<div class="project-header"><div><div class="agent-type-tag">' + escapeHtml(typeLabel) + '</div><h1>' + escapeHtml(detail.name) + '</h1></div>' +
@@ -604,6 +604,7 @@
     const content = $('tabContent');
     if (currentTab === 'sheet' && detail.hasDataSource) renderSheetTab(content, detail);
     else if (currentTab === 'llm') renderLlmTab(content, detail);
+    else if (currentTab === 'skills') renderSkillsTab(content, detail);
     else if (currentTab === 'guardrails') renderGuardrailsTab(content, detail);
     else if (currentTab === 'usage') renderProjectUsageTab(content, detail);
     else renderDeployTab(content, detail);
@@ -677,6 +678,216 @@
         $('llmMsg').textContent = 'Saved.';
         setTimeout(() => selectProject(currentSlug), 400);
       } catch (e) { $('llmMsg').textContent = e.message; $('llmMsg').style.color = 'var(--red)'; }
+    });
+  }
+
+  // ---- Skills (external API tools) ----
+  let skillFormParams = [];
+  let skillFormEditingId = null;
+
+  async function renderSkillsTab(el, detail) {
+    el.innerHTML = '<div class="hint">Loading skills…</div>';
+    let skills;
+    try {
+      const data = await api('/projects/' + currentSlug + '/skills');
+      skills = data.skills;
+    } catch (e) {
+      el.innerHTML = '<div class="hint">Couldn\'t load skills: ' + escapeHtml(e.message) + '</div>';
+      return;
+    }
+    if (currentSlug !== detail.slug) return;
+
+    const list = skills.map((s) => (
+      '<div class="card" style="margin-bottom:10px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">' +
+          '<div style="min-width:0;">' +
+            '<div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">' +
+              '<span class="mono" style="font-weight:700; color:#fff; font-size:13px;">' + escapeHtml(s.name) + '</span>' +
+              '<span class="badge ' + (s.enabled ? 'badge-green' : 'badge-grey') + '">' + (s.enabled ? 'enabled' : 'disabled') + '</span>' +
+              '<span class="badge badge-cyan">' + s.method + '</span>' +
+            '</div>' +
+            '<div class="hint" style="margin:0 0 6px;">' + escapeHtml(s.description) + '</div>' +
+            '<div class="mono" style="font-size:11px; color:var(--ink-faint); word-break:break-all;">' + escapeHtml(s.url) + '</div>' +
+          '</div>' +
+          '<div style="display:flex; gap:6px; flex-shrink:0;">' +
+            '<button class="btn btn-secondary skill-edit-btn" data-id="' + s.id + '">Edit</button>' +
+            '<button class="btn btn-danger skill-delete-btn" data-id="' + s.id + '">Delete</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    )).join('');
+
+    el.innerHTML =
+      '<div class="hint" style="margin-bottom:16px;">Skills let this agent call external APIs mid-conversation — order lookups, live pricing, CRM writes, anything reachable over HTTP. The description is what tells the model when to use each one, so be specific.</div>' +
+      (skills.length === 0 ? '<div class="card"><div class="hint">No skills yet for this agent.</div></div>' : list) +
+      '<button class="btn btn-primary" id="addSkillBtn" style="margin-top:4px;">+ Add Skill</button>' +
+      '<div id="skillEditorWrap" style="margin-top:16px;"></div>';
+
+    document.querySelectorAll('.skill-edit-btn').forEach((btn) => {
+      btn.addEventListener('click', () => openSkillEditor(skills.find((s) => s.id === btn.dataset.id)));
+    });
+    document.querySelectorAll('.skill-delete-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this skill? Any agent behavior depending on it will stop working.')) return;
+        await api('/projects/' + currentSlug + '/skills/' + btn.dataset.id, { method: 'DELETE' });
+        renderSkillsTab(el, detail);
+      });
+    });
+    $('addSkillBtn').addEventListener('click', () => openSkillEditor(null));
+  }
+
+  function renderParamRows() {
+    return skillFormParams.map((p, idx) => (
+      '<div class="row-2" style="grid-template-columns: 1.2fr 0.8fr 1.5fr auto auto; align-items:end; margin-bottom:8px;" data-param-row="' + idx + '">' +
+        '<div class="field" style="margin:0;"><label>Name</label><input class="param-name" value="' + escapeHtml(p.name || '') + '" placeholder="orderId" /></div>' +
+        '<div class="field" style="margin:0;"><label>Type</label><select class="param-type"><option value="string"' + (p.type === 'string' ? ' selected' : '') + '>string</option><option value="number"' + (p.type === 'number' ? ' selected' : '') + '>number</option><option value="boolean"' + (p.type === 'boolean' ? ' selected' : '') + '>boolean</option></select></div>' +
+        '<div class="field" style="margin:0;"><label>Description</label><input class="param-desc" value="' + escapeHtml(p.description || '') + '" placeholder="What this value is" /></div>' +
+        '<div class="field" style="margin:0;"><label>Required</label><input type="checkbox" class="param-required" ' + (p.required ? 'checked' : '') + ' style="width:18px; height:18px; margin-top:6px;" /></div>' +
+        '<button class="btn btn-ghost param-remove-btn" data-idx="' + idx + '" style="margin-bottom:2px;" title="Remove">✕</button>' +
+      '</div>'
+    )).join('');
+  }
+
+  function bindParamRowEvents(container) {
+    container.querySelectorAll('[data-param-row]').forEach((row) => {
+      const idx = Number(row.dataset.paramRow);
+      row.querySelector('.param-name').addEventListener('input', (e) => { skillFormParams[idx].name = e.target.value; });
+      row.querySelector('.param-type').addEventListener('change', (e) => { skillFormParams[idx].type = e.target.value; });
+      row.querySelector('.param-desc').addEventListener('input', (e) => { skillFormParams[idx].description = e.target.value; });
+      row.querySelector('.param-required').addEventListener('change', (e) => { skillFormParams[idx].required = e.target.checked; });
+    });
+    container.querySelectorAll('.param-remove-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        skillFormParams.splice(Number(btn.dataset.idx), 1);
+        refreshParamsUI(container);
+      });
+    });
+  }
+
+  function refreshParamsUI(container) {
+    const wrap = container.querySelector('#paramRowsWrap');
+    wrap.innerHTML = renderParamRows();
+    bindParamRowEvents(container);
+  }
+
+  function openSkillEditor(skill) {
+    skillFormEditingId = skill ? skill.id : null;
+    skillFormParams = skill ? JSON.parse(JSON.stringify(skill.params || [])) : [];
+    const wrap = $('skillEditorWrap');
+
+    wrap.innerHTML =
+      '<div class="card">' +
+        '<h3>' + (skill ? 'Edit skill' : 'New skill') + '</h3>' +
+        '<div class="row-2">' +
+          '<div class="field"><label>Skill name (internal id)</label><input id="sf_name" value="' + escapeHtml(skill ? skill.name : '') + '" placeholder="get_order_status" /></div>' +
+          '<div class="field"><label>HTTP method</label><select id="sf_method">' +
+            ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => '<option value="' + m + '"' + (skill && skill.method === m ? ' selected' : '') + '>' + m + '</option>').join('') +
+          '</select></div>' +
+        '</div>' +
+        '<div class="field"><label>Description (this is how the model decides when to use it)</label>' +
+          '<textarea id="sf_description" placeholder="Looks up the current shipping status of an order given its order ID.">' + escapeHtml(skill ? skill.description : '') + '</textarea></div>' +
+        '<div class="field"><label>URL (use {paramName} for path/query placeholders)</label>' +
+          '<input id="sf_url" value="' + escapeHtml(skill ? skill.url : '') + '" placeholder="https://api.example.com/orders/{orderId}" /></div>' +
+        '<div class="field"><label>Parameters</label>' +
+          '<div id="paramRowsWrap">' + renderParamRows() + '</div>' +
+          '<button class="btn btn-secondary" id="addParamBtn" type="button">+ Add parameter</button>' +
+        '</div>' +
+        '<div class="row-2">' +
+          '<div class="field"><label>Auth type</label><select id="sf_authType">' +
+            '<option value="none"' + (skill && skill.authType === 'none' ? ' selected' : '') + '>None</option>' +
+            '<option value="bearer"' + (skill && skill.authType === 'bearer' ? ' selected' : '') + '>Bearer token</option>' +
+            '<option value="api_key_header"' + (skill && skill.authType === 'api_key_header' ? ' selected' : '') + '>API key header</option>' +
+          '</select></div>' +
+          '<div class="field" id="sf_authHeaderNameWrap"><label>Header name (for API key header)</label><input id="sf_authHeaderName" value="' + escapeHtml(skill ? skill.authHeaderName : '') + '" placeholder="X-API-Key" /></div>' +
+        '</div>' +
+        '<div class="field"><label>Auth value ' + (skill && skill.hasAuthValue ? '(saved — paste to replace)' : '') + '</label><input id="sf_authValue" type="password" placeholder="secret token or key" /></div>' +
+        '<div class="field" id="sf_bodyWrap"><label>Body template (optional, JSON — use {paramName} placeholders)</label><textarea id="sf_bodyTemplate" placeholder=\'{"orderId": "{orderId}"}\'>' + escapeHtml(skill ? skill.bodyTemplate : '') + '</textarea></div>' +
+        '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none;"><input type="checkbox" id="sf_enabled" ' + (!skill || skill.enabled ? 'checked' : '') + ' style="width:16px; height:16px;" /> Enabled</label></div>' +
+        '<div class="save-row">' +
+          '<button class="btn btn-primary" id="saveSkillBtn">' + (skill ? 'Save changes' : 'Create skill') + '</button>' +
+          '<button class="btn btn-secondary" id="cancelSkillBtn">Cancel</button>' +
+          '<span class="save-msg" id="skillFormMsg"></span>' +
+        '</div>' +
+        (skill ? '<div id="skillTestWrap" style="margin-top:18px; padding-top:16px; border-top:1px solid var(--glass-line);"></div>' : '') +
+      '</div>';
+
+    bindParamRowEvents(wrap);
+    $('addParamBtn').addEventListener('click', () => {
+      skillFormParams.push({ name: '', type: 'string', description: '', required: false });
+      refreshParamsUI(wrap);
+    });
+    $('cancelSkillBtn').addEventListener('click', () => { wrap.innerHTML = ''; });
+
+    function syncAuthVisibility() {
+      $('sf_authHeaderNameWrap').style.display = $('sf_authType').value === 'api_key_header' ? 'block' : 'none';
+    }
+    function syncBodyVisibility() {
+      $('sf_bodyWrap').style.display = ['POST', 'PUT', 'PATCH'].includes($('sf_method').value) ? 'block' : 'none';
+    }
+    $('sf_authType').addEventListener('change', syncAuthVisibility);
+    $('sf_method').addEventListener('change', syncBodyVisibility);
+    syncAuthVisibility(); syncBodyVisibility();
+
+    $('saveSkillBtn').addEventListener('click', async () => {
+      const body = {
+        name: $('sf_name').value.trim(),
+        description: $('sf_description').value.trim(),
+        method: $('sf_method').value,
+        url: $('sf_url').value.trim(),
+        params: skillFormParams.filter((p) => p.name.trim()),
+        authType: $('sf_authType').value,
+        authHeaderName: $('sf_authHeaderName').value.trim(),
+        bodyTemplate: $('sf_bodyTemplate').value.trim(),
+        enabled: $('sf_enabled').checked,
+      };
+      const authValue = $('sf_authValue').value.trim();
+      if (authValue) body.authValue = authValue;
+
+      try {
+        let saved;
+        if (skillFormEditingId) {
+          const r = await api('/projects/' + currentSlug + '/skills/' + skillFormEditingId, { method: 'PUT', body });
+          saved = r.skill;
+        } else {
+          const r = await api('/projects/' + currentSlug + '/skills', { method: 'POST', body });
+          saved = r.skill;
+        }
+        $('skillFormMsg').textContent = 'Saved.';
+        openSkillEditor(saved); // reopen in edit mode so the Test panel becomes available
+        renderSkillsTab($('tabContent'), currentDetail);
+      } catch (e) {
+        $('skillFormMsg').textContent = e.message;
+        $('skillFormMsg').style.color = 'var(--red)';
+      }
+    });
+
+    if (skill) renderSkillTestPanel(skill);
+  }
+
+  function renderSkillTestPanel(skill) {
+    const testWrap = $('skillTestWrap');
+    if (!testWrap) return;
+    const paramInputs = (skill.params || []).map((p) => (
+      '<div class="field"><label>' + escapeHtml(p.name) + (p.required ? ' *' : '') + '</label><input class="test-param-input" data-param="' + escapeHtml(p.name) + '" placeholder="' + escapeHtml(p.description || '') + '" /></div>'
+    )).join('');
+    testWrap.innerHTML =
+      '<h3 style="margin-bottom:10px;">Test this skill</h3>' +
+      (skill.params && skill.params.length ? paramInputs : '<div class="hint" style="margin-bottom:10px;">No parameters — this call takes no arguments.</div>') +
+      '<button class="btn btn-secondary" id="runSkillTestBtn">Run test</button>' +
+      '<pre id="skillTestResult" class="deploy-box" style="display:none; margin-top:12px; white-space:pre-wrap;"></pre>';
+
+    $('runSkillTestBtn').addEventListener('click', async () => {
+      const args = {};
+      testWrap.querySelectorAll('.test-param-input').forEach((inp) => { if (inp.value) args[inp.dataset.param] = inp.value; });
+      const resultEl = $('skillTestResult');
+      resultEl.style.display = 'block';
+      resultEl.textContent = 'Running…';
+      try {
+        const r = await api('/projects/' + currentSlug + '/skills/' + skill.id + '/test', { method: 'POST', body: { args } });
+        resultEl.textContent = JSON.stringify(r.result, null, 2);
+      } catch (e) {
+        resultEl.textContent = 'Error: ' + e.message;
+      }
     });
   }
 

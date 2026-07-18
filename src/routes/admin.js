@@ -4,6 +4,7 @@ const registry = require('../projectRegistry');
 const cryptoHelper = require('../crypto');
 const usageStore = require('../usageStore');
 const { AGENT_TYPES } = require('../agentTypes');
+const { executeSkill } = require('../skillExecutor');
 
 const router = express.Router();
 
@@ -215,6 +216,60 @@ router.get('/projects/:slug/usage/log', async (req, res) => {
     res.json({ logs });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Skills (external API tools) ----
+router.get('/projects/:slug/skills', async (req, res) => {
+  try {
+    const skills = await registry.listSkills(req.params.slug);
+    res.json({ skills: skills.map((s) => ({ ...s, authValueEnc: undefined })) });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+router.post('/projects/:slug/skills', async (req, res) => {
+  try {
+    const skill = await registry.createSkill(req.params.slug, req.body || {});
+    res.json({ skill: { ...skill, authValueEnc: undefined } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/projects/:slug/skills/:skillId', async (req, res) => {
+  try {
+    const skill = await registry.updateSkill(req.params.slug, req.params.skillId, req.body || {});
+    res.json({ skill: { ...skill, authValueEnc: undefined } });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/projects/:slug/skills/:skillId', async (req, res) => {
+  try {
+    await registry.deleteSkill(req.params.slug, req.params.skillId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// Fires the skill directly with sample args (no LLM involved) so the
+// operator can verify it works before an agent ever relies on it.
+router.post('/projects/:slug/skills/:skillId/test', async (req, res) => {
+  try {
+    const project = registry.getProject(req.params.slug);
+    if (!project) return res.status(404).json({ error: 'Project not found.' });
+    const skill = project.skills.find((s) => s.id === req.params.skillId);
+    if (!skill) return res.status(404).json({ error: 'Skill not found.' });
+
+    const authValue = registry.getDecryptedSkillAuth(skill);
+    const result = await executeSkill(skill, req.body?.args || {}, authValue);
+    res.json({ result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

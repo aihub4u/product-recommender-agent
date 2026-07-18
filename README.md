@@ -192,6 +192,54 @@ last 14 days, and a table of the most recent individual requests with exact
 date and time, provider, model, and per-request token/cost breakdown —
 useful for spotting exactly when a spike happened, not just that one did.
 
+## Skills — connecting agents to external APIs
+
+Every agent (catalog-based or generic) now has a **Skills** tab. A skill is a
+single external HTTP API call the agent can invoke mid-conversation — an
+order-status lookup, a live pricing endpoint, a CRM write, anything reachable
+over HTTP. Under the hood this uses real LLM tool/function calling (OpenAI
+and Anthropic both supported): the model sees each skill's name and
+description as an available tool, decides for itself when to call one, the
+platform executes the actual HTTP request, and feeds the result back to the
+model — looping up to 3 rounds before it must produce a final answer.
+
+**The description field is the only signal the model has** for deciding
+when to use a skill — write it like you're briefing a new employee on when
+this tool is relevant, not just what it technically does.
+
+Configuring a skill:
+- **Name** — a short internal identifier (letters/numbers/underscore), how the model refers to it.
+- **Description** — required, at least a sentence — drives tool selection.
+- **URL** — supports `{paramName}` placeholders substituted from the parameters you define.
+- **Parameters** — name, type, description, required — becomes the tool's input schema.
+- **Auth** — none, Bearer token, or a custom API-key header. The secret is
+  encrypted at rest the same way LLM keys are, and the dashboard never shows
+  it back once saved, only a "saved" indicator.
+- **Body template** (POST/PUT/PATCH) — optional JSON template with the same
+  `{paramName}` placeholders; if omitted, the parameters are sent as a plain
+  JSON body.
+- **Test this skill** — once saved, fire the real HTTP call directly (no LLM
+  involved) with sample values to confirm it works before any agent relies
+  on it.
+
+**Security**: every skill call is checked against SSRF before it fires — the
+platform refuses to call localhost, loopback, link-local (including cloud
+metadata endpoints like `169.254.169.254`), or any RFC1918 private address
+range, resolved via a real DNS lookup at call time (not just a string match
+on the URL), and enforces an 8-second timeout with a response size cap fed
+back to the model. Only `http`/`https` URLs are accepted.
+
+**Token usage**: every round of the tool-calling loop counts toward that
+request's token usage, summed and logged the same way as any other LLM
+call — visible in the agent's Usage tab like normal.
+
+**Rule-engine limitation**: skills only work when an LLM is configured — the
+rule-based fallback engine has no reasoning capability, so it can't decide
+when to call a tool. If the LLM call fails mid-conversation, the usual
+fallback behavior applies (rule engine for catalog agents, a graceful
+message for generic agents) and any pending tool call is simply not made
+for that turn.
+
 ## Security notes
 
 

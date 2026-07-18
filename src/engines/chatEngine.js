@@ -1,4 +1,4 @@
-const { callProvider } = require('./providers');
+const { runWithTools } = require('./toolLoop');
 const { getAgentType } = require('../agentTypes');
 
 function buildSystemPrompt(agentType, systemPromptSuffix) {
@@ -22,7 +22,7 @@ function buildUserMessage(query, history) {
   return conversation ? `Conversation so far:\n${conversation}\n\nLatest user message: ${query}` : query;
 }
 
-async function decide({ query, history, llmConfig, agentType, systemPromptSuffix = '' }) {
+async function decide({ query, history, llmConfig, agentType, systemPromptSuffix = '', skills = [] }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('Chat engine called without a valid provider/apiKey — this should not happen.');
   }
@@ -30,9 +30,9 @@ async function decide({ query, history, llmConfig, agentType, systemPromptSuffix
   const systemPrompt = buildSystemPrompt(agentType, systemPromptSuffix);
   const userMessage = buildUserMessage(query, history);
 
-  const { rawText, usage } = await callProvider({
+  const { rawText, usage } = await runWithTools({
     provider: llmConfig.provider, apiKey: llmConfig.apiKey, model: llmConfig.model,
-    systemPrompt, userMessage, jsonMode: false,
+    systemPrompt, userMessage, skills, jsonMode: false,
   });
 
   return { action: 'reply', message: rawText.trim(), usage };
