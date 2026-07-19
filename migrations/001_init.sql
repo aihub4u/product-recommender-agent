@@ -116,4 +116,92 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_project ON knowledge_chunks(project_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_source ON knowledge_chunks(source_id);
 
+-- ============================================================
+-- Meta Business Agent (BizAI WA Enterprise 3P API) — a separate
+-- subsystem: these agents are configured and hosted entirely on Meta's
+-- infrastructure via their API, not run by our own engine/LLM keys.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS meta_biz_agents (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  entity_id TEXT NOT NULL,
+  access_token_enc TEXT,
+  agent_id TEXT,                          -- returned by Meta on onboarding
+  api_base TEXT DEFAULT 'https://api.facebook.com',
+  onboarded BOOLEAN DEFAULT false,
+  rollout_enabled BOOLEAN DEFAULT false,
+  handoff_enabled BOOLEAN DEFAULT true,
+  handoff_message TEXT DEFAULT '',
+  followup_enabled BOOLEAN DEFAULT true,
+  followup_message TEXT DEFAULT '',
+  ai_audience TEXT DEFAULT 'EVERYONE',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meta_biz_agents_slug ON meta_biz_agents(slug);
+
+CREATE TABLE IF NOT EXISTS meta_biz_agent_business_info (
+  agent_id UUID PRIMARY KEY REFERENCES meta_biz_agents(id) ON DELETE CASCADE,
+  business_description TEXT DEFAULT '',
+  payment_method TEXT DEFAULT '',
+  return_policy TEXT DEFAULT '',
+  purchase_info TEXT DEFAULT '',
+  delivery_and_shipping TEXT DEFAULT '',
+  contact_email TEXT DEFAULT '',
+  contact_hours TEXT DEFAULT '',
+  contact_address TEXT DEFAULT '',
+  synced BOOLEAN DEFAULT false,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS meta_biz_agent_faqs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id UUID REFERENCES meta_biz_agents(id) ON DELETE CASCADE,
+  question TEXT NOT NULL,
+  answer TEXT NOT NULL,
+  synced BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meta_biz_faqs_agent ON meta_biz_agent_faqs(agent_id);
+
+CREATE TABLE IF NOT EXISTS meta_biz_agent_skills (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id UUID REFERENCES meta_biz_agents(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  skill_markdown TEXT NOT NULL,
+  synced BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meta_biz_skills_agent ON meta_biz_agent_skills(agent_id);
+
+CREATE TABLE IF NOT EXISTS meta_biz_agent_connectors (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_id UUID REFERENCES meta_biz_agents(id) ON DELETE CASCADE,
+  remote_connector_id TEXT,               -- CONNECTOR_ID returned by Meta
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  base_url TEXT NOT NULL,
+  auth_type TEXT DEFAULT 'API_KEY',
+  auth_header_name TEXT DEFAULT '',
+  auth_value_enc TEXT,
+  synced BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meta_biz_connectors_agent ON meta_biz_agent_connectors(agent_id);
+
+CREATE TABLE IF NOT EXISTS meta_biz_agent_tools (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  connector_id UUID REFERENCES meta_biz_agent_connectors(id) ON DELETE CASCADE,
+  remote_tool_id TEXT,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  request_definition_json TEXT NOT NULL,  -- raw JSON matching Meta's request_definition shape
+  synced BOOLEAN DEFAULT false,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_meta_biz_tools_connector ON meta_biz_agent_tools(connector_id);
+
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);

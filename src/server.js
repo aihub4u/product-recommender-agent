@@ -8,6 +8,7 @@ const registry = require('./projectRegistry');
 const sessionStore = require('./sessionStore');
 const adminRoutes = require('./routes/admin');
 const publicApiRoutes = require('./routes/publicApi');
+const metaBizAdminRoutes = require('./routes/metaBizAdmin');
 
 const app = express();
 app.use(cors({ credentials: true, origin: true }));
@@ -17,6 +18,7 @@ app.use(express.json());
 // Admin API (protected, except /login) — lives under /api/admin so it can
 // never collide with a project slug at /api/:slug/...
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/meta-biz', metaBizAdminRoutes);
 
 // Public per-project recommendation API.
 app.use('/api', publicApiRoutes);

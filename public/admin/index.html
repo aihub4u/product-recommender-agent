@@ -305,6 +305,11 @@
       <div class="nav-section-label">Agents</div>
       <div class="project-list" id="projectList"></div>
 
+      <div class="nav-section-label">Meta Integrations</div>
+      <div class="nav-item" id="navMetaBiz">
+        <span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>Meta Business Agents</span>
+      </div>
+
       <div class="sidebar-spacer"></div>
       <div class="sidebar-footer">
         <button class="btn btn-primary" id="newProjectBtn" style="width:100%; justify-content:center;">+ New Agent</button>
@@ -365,9 +370,24 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="newMetaBizModal">
+  <div class="modal-card">
+    <h3>New Meta Business Agent</h3>
+    <p class="hint" style="margin:0 0 16px;">Configured and hosted on Meta's own infrastructure via the BizAI API — separate from the agents above.</p>
+    <div class="field"><label>Name</label><input id="mb_name" placeholder="e.g. MDH Spices Bot" /></div>
+    <div class="field"><label>Entity ID (WhatsApp Business Account ID)</label><input id="mb_entityId" placeholder="e.g. 1234567890" /></div>
+    <div class="field"><label>Access token</label><input id="mb_accessToken" type="password" placeholder="BizAI access token" /></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" id="cancelNewMetaBiz">Cancel</button>
+      <button class="btn btn-primary" id="confirmNewMetaBiz">Create</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   const API = '/api/admin';
+  const METABIZ_API = '/api/admin/meta-biz';
   let projects = [];
   let agentTypes = [];
   let currentSlug = null;
@@ -375,6 +395,9 @@
   let currentTab = null;
   let currentDetail = null;
   let wizardSelectedType = null;
+  let metaBizSlug = null;
+  let metaBizTab = null;
+  let metaBizDetail = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -394,6 +417,18 @@
     const formData = new FormData();
     formData.append('file', file);
     const res = await fetch(API + path, { method: 'POST', credentials: 'include', body: formData });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+    return data;
+  }
+
+  async function metaApi(path, opts = {}) {
+    const res = await fetch(METABIZ_API + path, {
+      method: opts.method || 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
     return data;
@@ -433,6 +468,7 @@
   $('logoutBtn').addEventListener('click', async () => { await api('/logout', { method: 'POST' }); showLogin(); });
 
   $('navUsage').addEventListener('click', () => { currentView = 'usage'; currentSlug = null; renderProjectList(); renderUsageView(); });
+  $('navMetaBiz').addEventListener('click', () => { currentView = 'metabiz'; currentSlug = null; metaBizSlug = null; renderProjectList(); renderMetaBizListView(); });
 
   async function loadProjects() {
     const data = await api('/projects');
@@ -447,6 +483,7 @@
 
   function renderProjectList() {
     $('navUsage').classList.toggle('active', currentView === 'usage');
+    $('navMetaBiz').classList.toggle('active', currentView === 'metabiz');
     const list = $('projectList');
     list.innerHTML = '';
     projects.forEach((p) => {
@@ -1100,6 +1137,369 @@
       '<div class="card"><h3>Test it live</h3><p class="hint" style="margin-bottom:14px;">This is the actual chat UI, wired to this agent\'s API — try it right here.</p>' +
       '<div class="chat-embed-wrap"><div class="chat-embed-frame"><iframe src="/chat/' + detail.slug + '" title="Test chat"></iframe></div></div>' +
       '<div style="text-align:center; margin-top:12px;"><a href="/chat/' + detail.slug + '" target="_blank" class="hint">Open in a full tab ↗</a></div></div>';
+  }
+
+  // ============================================================
+  // Meta Business Agent section — fully separate from our own Agents.
+  // Configures agents hosted on Meta's own infrastructure via BizAI API.
+  // ============================================================
+
+  async function renderMetaBizListView() {
+    $('main').innerHTML = '<div class="empty-state">Loading Meta Business Agents…</div>';
+    let agents;
+    try { agents = (await metaApi('/agents')).agents; }
+    catch (e) { $('main').innerHTML = '<div class="empty-state">Couldn\'t load: ' + escapeHtml(e.message) + '</div>'; return; }
+    if (currentView !== 'metabiz') return;
+
+    const cards = agents.map((a) => (
+      '<div class="card meta-agent-card" data-slug="' + a.slug + '" style="cursor:pointer; margin-bottom:10px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:center;">' +
+          '<div>' +
+            '<div style="font-weight:700; color:#fff; font-size:14px; margin-bottom:4px;">' + escapeHtml(a.name) + '</div>' +
+            '<div class="mono hint">Entity: ' + escapeHtml(a.entityId) + '</div>' +
+          '</div>' +
+          '<div style="display:flex; gap:6px;">' +
+            (a.onboarded ? '<span class="badge badge-green">onboarded</span>' : '<span class="badge badge-grey">not onboarded</span>') +
+            (a.rolloutEnabled ? '<span class="badge badge-violet">live</span>' : '<span class="badge badge-grey">offline</span>') +
+          '</div>' +
+        '</div>' +
+      '</div>'
+    )).join('');
+
+    $('main').innerHTML =
+      '<div class="project-header"><h1>Meta Business Agents</h1></div>' +
+      '<div class="hint" style="margin-bottom:20px;">Agents configured and hosted entirely on Meta\'s own infrastructure via the BizAI WA Enterprise API — separate from the agents you build and run on this platform above. Each change here pushes live to Meta.</div>' +
+      '<button class="btn btn-primary" id="metaNewAgentBtn" style="margin-bottom:18px;">+ New Meta Business Agent</button>' +
+      (agents.length === 0 ? '<div class="hint">No Meta Business Agents yet.</div>' : cards);
+
+    $('metaNewAgentBtn').addEventListener('click', () => {
+      $('mb_name').value = ''; $('mb_entityId').value = ''; $('mb_accessToken').value = '';
+      $('newMetaBizModal').classList.add('show');
+    });
+    document.querySelectorAll('.meta-agent-card').forEach((el) => {
+      el.addEventListener('click', () => selectMetaBizAgent(el.dataset.slug));
+    });
+  }
+
+  $('cancelNewMetaBiz').addEventListener('click', () => $('newMetaBizModal').classList.remove('show'));
+  $('confirmNewMetaBiz').addEventListener('click', async () => {
+    try {
+      const res = await metaApi('/agents', {
+        method: 'POST',
+        body: { name: $('mb_name').value.trim(), entityId: $('mb_entityId').value.trim(), accessToken: $('mb_accessToken').value.trim() },
+      });
+      $('newMetaBizModal').classList.remove('show');
+      selectMetaBizAgent(res.agent.slug);
+    } catch (e) { alert(e.message); }
+  });
+
+  async function selectMetaBizAgent(slug) {
+    metaBizSlug = slug;
+    metaBizTab = 'setup';
+    const detail = await metaApi('/agents/' + slug);
+    metaBizDetail = detail;
+    renderMetaBizDetail(detail);
+  }
+
+  function renderMetaBizDetail(detail) {
+    const tabs = [['setup', 'Setup'], ['settings', 'Settings & Go-Live'], ['business-info', 'Business Info'], ['faqs', 'FAQs'], ['skills', 'Skills'], ['connectors', 'Connectors & Tools']];
+
+    $('main').innerHTML =
+      '<div class="project-header">' +
+        '<div><a href="#" id="metaBackToList" class="hint">← All Meta Business Agents</a><h1 style="margin-top:6px;">' + escapeHtml(detail.name) + '</h1></div>' +
+        '<span class="slug-tag">' + detail.entityId + '</span>' +
+      '</div>' +
+      '<div class="status-row">' +
+        (detail.onboarded ? '<span class="badge badge-green">onboarded</span>' : '<span class="badge badge-grey">not onboarded</span>') +
+        (detail.settings.rolloutEnabled ? '<span class="badge badge-violet">live on WhatsApp</span>' : '<span class="badge badge-grey">offline</span>') +
+      '</div>' +
+      '<div class="tabs">' + tabs.map(([id, label]) => '<div class="tab" data-mbtab="' + id + '">' + label + '</div>').join('') + '</div>' +
+      '<div id="metaTabContent"></div>';
+
+    $('metaBackToList').addEventListener('click', (e) => { e.preventDefault(); currentView = 'metabiz'; renderProjectList(); renderMetaBizListView(); });
+    document.querySelectorAll('[data-mbtab]').forEach((t) => {
+      t.classList.toggle('active', t.dataset.mbtab === metaBizTab);
+      t.addEventListener('click', () => { metaBizTab = t.dataset.mbtab; renderMetaBizDetail(detail); });
+    });
+
+    const content = $('metaTabContent');
+    if (metaBizTab === 'setup') renderMetaSetupTab(content, detail);
+    else if (metaBizTab === 'settings') renderMetaSettingsTab(content, detail);
+    else if (metaBizTab === 'business-info') renderMetaBusinessInfoTab(content, detail);
+    else if (metaBizTab === 'faqs') renderMetaFaqsTab(content, detail);
+    else if (metaBizTab === 'skills') renderMetaSkillsTab(content, detail);
+    else renderMetaConnectorsTab(content, detail);
+  }
+
+  function renderMetaSetupTab(el, detail) {
+    el.innerHTML =
+      '<div class="card"><h3>Onboarding</h3>' +
+      '<div class="hint" style="margin-bottom:14px;">Entity ID: <span class="mono">' + escapeHtml(detail.entityId) + '</span> · Access token: ' + (detail.hasAccessToken ? 'set' : '<span style="color:var(--red);">not set</span>') + (detail.agentId ? ' · Agent ID: <span class="mono">' + escapeHtml(detail.agentId) + '</span>' : '') + '</div>' +
+      (detail.onboarded
+        ? '<div class="badge badge-green">Onboarded</div>'
+        : '<button class="btn btn-primary" id="onboardBtn">Onboard on Meta</button>') +
+      '<div class="hint" style="margin-top:14px;">Onboarding registers this agent with Meta\'s BizAI platform for the given entity and returns an agent ID, required before settings, skills, or connectors can be configured.</div>' +
+      '<div id="onboardMsg" class="save-msg" style="margin-top:8px;"></div></div>' +
+      '<div class="card"><h3>Danger zone</h3><button class="btn btn-danger" id="deleteMetaAgentBtn">Delete this Meta Business Agent</button></div>';
+
+    const onboardBtn = $('onboardBtn');
+    if (onboardBtn) onboardBtn.addEventListener('click', async () => {
+      $('onboardMsg').textContent = 'Onboarding…';
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/onboard', { method: 'POST' });
+        $('onboardMsg').textContent = 'Onboarded.';
+        selectMetaBizAgent(metaBizSlug);
+      } catch (e) { $('onboardMsg').textContent = e.message; $('onboardMsg').style.color = 'var(--red)'; }
+    });
+    $('deleteMetaAgentBtn').addEventListener('click', async () => {
+      if (!confirm('Delete this Meta Business Agent? This removes it from this dashboard — manage its live WhatsApp status directly with Meta if it\'s already rolled out.')) return;
+      await metaApi('/agents/' + metaBizSlug, { method: 'DELETE' });
+      currentView = 'metabiz'; renderProjectList(); renderMetaBizListView();
+    });
+  }
+
+  function renderMetaSettingsTab(el, detail) {
+    const s = detail.settings;
+    el.innerHTML =
+      '<div class="card"><h3>Handoff &amp; follow-up</h3>' +
+      '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none;"><input type="checkbox" id="mb_handoffEnabled" ' + (s.handoffEnabled ? 'checked' : '') + ' style="width:16px;height:16px;" /> Enable handoff</label></div>' +
+      '<div class="field"><label>Handoff message</label><input id="mb_handoffMessage" value="' + escapeHtml(s.handoffMessage || '') + '" placeholder="Please contact our team at https://wa.me/..." /></div>' +
+      '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none;"><input type="checkbox" id="mb_followupEnabled" ' + (s.followupEnabled ? 'checked' : '') + ' style="width:16px;height:16px;" /> Enable follow-up</label></div>' +
+      '<div class="field"><label>Follow-up message</label><input id="mb_followupMessage" value="' + escapeHtml(s.followupMessage || '') + '" placeholder="Still here whenever you\'d like to continue." /></div>' +
+      '<div class="field"><label>AI audience</label><select id="mb_aiAudience"><option value="EVERYONE"' + (s.aiAudience === 'EVERYONE' ? ' selected' : '') + '>Everyone</option></select></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="saveMetaSettingsBtn">Save settings</button><span class="save-msg" id="metaSettingsMsg"></span></div></div>' +
+      '<div class="card"><h3>Go live</h3>' +
+      '<div class="hint" style="margin-bottom:14px;">Rollout is currently <strong style="color:' + (s.rolloutEnabled ? 'var(--green)' : 'var(--red)') + ';">' + (s.rolloutEnabled ? 'LIVE' : 'OFFLINE') + '</strong> on WhatsApp. Finish configuring business info, FAQs, and skills before going live.</div>' +
+      '<button class="btn ' + (s.rolloutEnabled ? 'btn-danger' : 'btn-primary') + '" id="goLiveBtn">' + (s.rolloutEnabled ? 'Take offline' : 'Go live') + '</button>' +
+      '<span class="save-msg" id="goLiveMsg" style="margin-left:10px;"></span></div>';
+
+    $('saveMetaSettingsBtn').addEventListener('click', async () => {
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/settings', {
+          method: 'PUT',
+          body: {
+            handoffEnabled: $('mb_handoffEnabled').checked, handoffMessage: $('mb_handoffMessage').value.trim(),
+            followupEnabled: $('mb_followupEnabled').checked, followupMessage: $('mb_followupMessage').value.trim(),
+            aiAudience: $('mb_aiAudience').value,
+          },
+        });
+        $('metaSettingsMsg').textContent = 'Saved and pushed to Meta.';
+      } catch (e) { $('metaSettingsMsg').textContent = e.message; $('metaSettingsMsg').style.color = 'var(--red)'; }
+    });
+    $('goLiveBtn').addEventListener('click', async () => {
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/go-live', { method: 'POST', body: { enabled: !s.rolloutEnabled } });
+        selectMetaBizAgent(metaBizSlug);
+      } catch (e) { $('goLiveMsg').textContent = e.message; $('goLiveMsg').style.color = 'var(--red)'; }
+    });
+  }
+
+  function renderMetaBusinessInfoTab(el, detail) {
+    const b = detail.businessInfo || {};
+    el.innerHTML =
+      '<div class="card"><h3>Business information</h3>' +
+      '<div class="field"><label>Business description</label><textarea id="mb_businessDescription">' + escapeHtml(b.businessDescription || '') + '</textarea></div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Payment methods</label><input id="mb_paymentMethod" value="' + escapeHtml(b.paymentMethod || '') + '" /></div>' +
+        '<div class="field"><label>Purchase info</label><input id="mb_purchaseInfo" value="' + escapeHtml(b.purchaseInfo || '') + '" /></div>' +
+      '</div>' +
+      '<div class="field"><label>Return policy</label><textarea id="mb_returnPolicy">' + escapeHtml(b.returnPolicy || '') + '</textarea></div>' +
+      '<div class="field"><label>Delivery &amp; shipping</label><textarea id="mb_deliveryAndShipping">' + escapeHtml(b.deliveryAndShipping || '') + '</textarea></div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Contact email</label><input id="mb_contactEmail" value="' + escapeHtml(b.contactEmail || '') + '" /></div>' +
+        '<div class="field"><label>Hours of operation</label><input id="mb_contactHours" value="' + escapeHtml(b.contactHours || '') + '" /></div>' +
+      '</div>' +
+      '<div class="field"><label>Address</label><input id="mb_contactAddress" value="' + escapeHtml(b.contactAddress || '') + '" /></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="saveBizInfoBtn">Save &amp; push to Meta</button><span class="save-msg" id="bizInfoMsg"></span></div></div>';
+
+    $('saveBizInfoBtn').addEventListener('click', async () => {
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/business-info', {
+          method: 'PUT',
+          body: {
+            businessDescription: $('mb_businessDescription').value.trim(), paymentMethod: $('mb_paymentMethod').value.trim(),
+            returnPolicy: $('mb_returnPolicy').value.trim(), purchaseInfo: $('mb_purchaseInfo').value.trim(),
+            deliveryAndShipping: $('mb_deliveryAndShipping').value.trim(), contactEmail: $('mb_contactEmail').value.trim(),
+            contactHours: $('mb_contactHours').value.trim(), contactAddress: $('mb_contactAddress').value.trim(),
+          },
+        });
+        $('bizInfoMsg').textContent = 'Saved and pushed to Meta.';
+      } catch (e) { $('bizInfoMsg').textContent = e.message; $('bizInfoMsg').style.color = 'var(--red)'; }
+    });
+  }
+
+  function renderMetaFaqsTab(el, detail) {
+    const rows = detail.faqs.map((f) => (
+      '<div class="card" style="margin-bottom:8px;"><div style="display:flex; justify-content:space-between; gap:12px;">' +
+        '<div><div style="font-weight:600; color:#fff; margin-bottom:4px;">' + escapeHtml(f.question) + '</div><div class="hint">' + escapeHtml(f.answer) + '</div></div>' +
+        '<button class="btn btn-danger meta-faq-delete" data-id="' + f.id + '" style="flex-shrink:0;">Delete</button>' +
+      '</div></div>'
+    )).join('');
+    el.innerHTML =
+      '<div class="hint" style="margin-bottom:14px;">Meta\'s API has no delete-FAQ endpoint, so Delete here only removes it from this dashboard\'s records — it may still be live on Meta\'s side.</div>' +
+      (detail.faqs.length ? rows : '<div class="hint">No FAQs added yet.</div>') +
+      '<div class="card"><h3>Add FAQ</h3>' +
+      '<div class="field"><label>Question</label><input id="mb_faqQuestion" placeholder="What are your hours?" /></div>' +
+      '<div class="field"><label>Answer</label><textarea id="mb_faqAnswer" placeholder="Mon-Sat, 9:30 AM-6:30 PM IST"></textarea></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="addFaqBtn">Add &amp; push</button><span class="save-msg" id="faqMsg"></span></div></div>';
+
+    $('addFaqBtn').addEventListener('click', async () => {
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/faqs', { method: 'POST', body: { question: $('mb_faqQuestion').value.trim(), answer: $('mb_faqAnswer').value.trim() } });
+        selectMetaBizAgent(metaBizSlug);
+      } catch (e) { $('faqMsg').textContent = e.message; $('faqMsg').style.color = 'var(--red)'; }
+    });
+    document.querySelectorAll('.meta-faq-delete').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await metaApi('/agents/' + metaBizSlug + '/faqs/' + btn.dataset.id, { method: 'DELETE' });
+        selectMetaBizAgent(metaBizSlug);
+      });
+    });
+  }
+
+  const SKILL_TITLE_SUGGESTIONS = ['identity', 'communication-style', 'handoff-guardrails', 'safety-rules', 'capability-disclaimer', 'api-error-handling', 'response-strategy', 'reading-faq', 'media-handling', 'intent-router', 'product-search-flow'];
+
+  function renderMetaSkillsTab(el, detail) {
+    const rows = detail.skills.map((s) => (
+      '<div class="card" style="margin-bottom:8px;"><div style="display:flex; justify-content:space-between; gap:12px;">' +
+        '<div style="min-width:0;"><div class="mono" style="font-weight:700; color:#fff; margin-bottom:4px;">' + escapeHtml(s.title) + '</div><div class="hint" style="max-height:60px; overflow:hidden;">' + escapeHtml((s.skill || '').slice(0, 200)) + '…</div></div>' +
+        '<button class="btn btn-danger meta-skill-delete" data-id="' + s.id + '" style="flex-shrink:0;">Delete</button>' +
+      '</div></div>'
+    )).join('');
+    el.innerHTML =
+      '<div class="hint" style="margin-bottom:14px;">Skills are named markdown instruction documents — Meta\'s equivalent of guardrails/system-prompt sections. Common titles used in practice: ' + SKILL_TITLE_SUGGESTIONS.map((t) => '<code class="mono">' + t + '</code>').join(', ') + '.</div>' +
+      (detail.skills.length ? rows : '<div class="hint">No skills added yet.</div>') +
+      '<div class="card"><h3>Add skill</h3>' +
+      '<div class="field"><label>Title</label><input id="mb_skillTitle" placeholder="e.g. identity" /></div>' +
+      '<div class="field"><label>Description (optional)</label><input id="mb_skillDescription" placeholder="Apply for: identity" /></div>' +
+      '<div class="field"><label>Skill content (markdown)</label><textarea id="mb_skillContent" style="min-height:160px;" placeholder="# Identity&#10;&#10;You are..."></textarea></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="addSkillBtn">Add &amp; push</button><span class="save-msg" id="skillMsg"></span></div></div>';
+
+    $('addSkillBtn').addEventListener('click', async () => {
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/skills', {
+          method: 'POST',
+          body: { title: $('mb_skillTitle').value.trim(), description: $('mb_skillDescription').value.trim(), skill: $('mb_skillContent').value.trim() },
+        });
+        selectMetaBizAgent(metaBizSlug);
+      } catch (e) { $('skillMsg').textContent = e.message; $('skillMsg').style.color = 'var(--red)'; }
+    });
+    document.querySelectorAll('.meta-skill-delete').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await metaApi('/agents/' + metaBizSlug + '/skills/' + btn.dataset.id, { method: 'DELETE' });
+        selectMetaBizAgent(metaBizSlug);
+      });
+    });
+  }
+
+  function renderMetaConnectorsTab(el, detail) {
+    const connectorBlocks = detail.connectors.map((c) => {
+      const toolRows = c.tools.map((t) => (
+        '<div class="card" style="margin:8px 0; background:rgba(255,255,255,0.015);">' +
+          '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
+            '<div><div class="mono" style="font-weight:700; color:#fff;">' + escapeHtml(t.name) + '</div><div class="hint">' + escapeHtml(t.description || '') + '</div>' +
+            (t.synced ? '<span class="badge badge-green" style="margin-top:6px;">synced</span>' : '<span class="badge badge-grey" style="margin-top:6px;">not synced</span>') + '</div>' +
+            '<button class="btn btn-danger meta-tool-delete" data-connector="' + c.id + '" data-tool="' + t.id + '" style="flex-shrink:0;">Delete</button>' +
+          '</div>' +
+          (t.synced ? (
+            '<div style="margin-top:10px;"><label style="font-size:11px; color:var(--ink-faint); text-transform:uppercase;">Test input (JSON)</label>' +
+            '<textarea class="meta-test-input" data-connector="' + c.id + '" data-tool="' + t.id + '" style="min-height:60px; margin-top:4px;" placeholder=\'{"variables": {...}}\'></textarea>' +
+            '<button class="btn btn-secondary meta-test-run" data-connector="' + c.id + '" data-tool="' + t.id + '" style="margin-top:6px;">Run test</button>' +
+            '<pre class="deploy-box meta-test-result" data-tool="' + t.id + '" style="display:none; margin-top:10px; white-space:pre-wrap;"></pre></div>'
+          ) : '') +
+        '</div>'
+      )).join('');
+
+      return '<div class="card" style="margin-bottom:14px;">' +
+        '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
+          '<div><div style="font-weight:700; color:#fff;">' + escapeHtml(c.name) + '</div><div class="hint">' + escapeHtml(c.description || '') + '</div>' +
+          '<div class="mono hint" style="margin-top:4px;">' + escapeHtml(c.baseUrl) + '</div>' +
+          (c.synced ? '<span class="badge badge-green" style="margin-top:6px;">synced</span>' : '<span class="badge badge-grey" style="margin-top:6px;">not synced</span>') + '</div>' +
+          '<button class="btn btn-danger meta-connector-delete" data-id="' + c.id + '">Delete</button>' +
+        '</div>' +
+        toolRows +
+        (c.synced ? (
+          '<div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--glass-line);">' +
+          '<label style="font-size:11px; color:var(--ink-faint); text-transform:uppercase;">Add tool</label>' +
+          '<input class="mb-tool-name" data-connector="' + c.id + '" placeholder="tool name, e.g. create_cart" style="margin:6px 0;" />' +
+          '<input class="mb-tool-desc" data-connector="' + c.id + '" placeholder="When should the model use this?" style="margin-bottom:6px;" />' +
+          '<textarea class="mb-tool-def" data-connector="' + c.id + '" style="min-height:100px;" placeholder=\'{"method":"POST","path":"/graphql.json","body":{"content_type":"application/json","params":{}}}\'></textarea>' +
+          '<button class="btn btn-secondary mb-add-tool-btn" data-connector="' + c.id + '" style="margin-top:8px;">Add tool &amp; push</button>' +
+          '<span class="save-msg mb-tool-msg" data-connector="' + c.id + '" style="margin-left:8px;"></span>' +
+          '</div>'
+        ) : '') +
+      '</div>';
+    }).join('');
+
+    el.innerHTML =
+      '<div class="hint" style="margin-bottom:16px;">Connectors link this agent to an external API (e.g. Shopify); tools are the individual callable actions on that connector — the model decides when to call them based on each tool\'s description, same idea as this platform\'s own Skills feature.</div>' +
+      (detail.connectors.length ? connectorBlocks : '<div class="hint">No connectors yet.</div>') +
+      '<div class="card"><h3>Add connector</h3>' +
+      '<div class="field"><label>Name</label><input id="mb_connName" placeholder="shopifycartconnector" /></div>' +
+      '<div class="field"><label>Description</label><input id="mb_connDesc" placeholder="Connects to the Shopify Storefront API to create a cart." /></div>' +
+      '<div class="field"><label>Base URL</label><input id="mb_connBaseUrl" placeholder="https://yourstore.myshopify.com/api/2026-04" /></div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Auth type</label><select id="mb_connAuthType"><option value="API_KEY">API Key</option><option value="NONE">None</option></select></div>' +
+        '<div class="field"><label>Header name</label><input id="mb_connAuthHeader" placeholder="X-Shopify-Storefront-Access-Token" /></div>' +
+      '</div>' +
+      '<div class="field"><label>Auth value</label><input id="mb_connAuthValue" type="password" placeholder="secret token" /></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="addConnectorBtn">Add &amp; push</button><span class="save-msg" id="connectorMsg"></span></div></div>';
+
+    $('addConnectorBtn').addEventListener('click', async () => {
+      try {
+        await metaApi('/agents/' + metaBizSlug + '/connectors', {
+          method: 'POST',
+          body: {
+            name: $('mb_connName').value.trim(), description: $('mb_connDesc').value.trim(), baseUrl: $('mb_connBaseUrl').value.trim(),
+            authType: $('mb_connAuthType').value, authHeaderName: $('mb_connAuthHeader').value.trim(), authValue: $('mb_connAuthValue').value.trim(),
+          },
+        });
+        selectMetaBizAgent(metaBizSlug);
+      } catch (e) { $('connectorMsg').textContent = e.message; $('connectorMsg').style.color = 'var(--red)'; }
+    });
+
+    document.querySelectorAll('.meta-connector-delete').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Delete this connector and its tools from the dashboard?')) return;
+        await metaApi('/agents/' + metaBizSlug + '/connectors/' + btn.dataset.id, { method: 'DELETE' });
+        selectMetaBizAgent(metaBizSlug);
+      });
+    });
+    document.querySelectorAll('.meta-tool-delete').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        await metaApi('/agents/' + metaBizSlug + '/connectors/' + btn.dataset.connector + '/tools/' + btn.dataset.tool, { method: 'DELETE' });
+        selectMetaBizAgent(metaBizSlug);
+      });
+    });
+    document.querySelectorAll('.mb-add-tool-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const cid = btn.dataset.connector;
+        const nameInput = document.querySelector('.mb-tool-name[data-connector="' + cid + '"]');
+        const descInput = document.querySelector('.mb-tool-desc[data-connector="' + cid + '"]');
+        const defInput = document.querySelector('.mb-tool-def[data-connector="' + cid + '"]');
+        const msgEl = document.querySelector('.mb-tool-msg[data-connector="' + cid + '"]');
+        try {
+          const requestDefinition = JSON.parse(defInput.value.trim() || '{}');
+          await metaApi('/agents/' + metaBizSlug + '/connectors/' + cid + '/tools', {
+            method: 'POST', body: { name: nameInput.value.trim(), description: descInput.value.trim(), requestDefinition },
+          });
+          selectMetaBizAgent(metaBizSlug);
+        } catch (e) { msgEl.textContent = e.message; msgEl.style.color = 'var(--red)'; }
+      });
+    });
+    document.querySelectorAll('.meta-test-run').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const cid = btn.dataset.connector, tid = btn.dataset.tool;
+        const inputEl = document.querySelector('.meta-test-input[data-connector="' + cid + '"][data-tool="' + tid + '"]');
+        const resultEl = document.querySelector('.meta-test-result[data-tool="' + tid + '"]');
+        resultEl.style.display = 'block'; resultEl.textContent = 'Running…';
+        try {
+          const input = JSON.parse(inputEl.value.trim() || '{}');
+          const r = await metaApi('/agents/' + metaBizSlug + '/connectors/' + cid + '/tools/' + tid + '/test', { method: 'POST', body: { input } });
+          resultEl.textContent = JSON.stringify(r.result, null, 2);
+        } catch (e) { resultEl.textContent = 'Error: ' + e.message; }
+      });
+    });
   }
 
   checkAuth();

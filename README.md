@@ -273,6 +273,44 @@ re-index it. Worth building a scheduled refresh later if a client's site content
 typically a fraction of a cent) plus a small latency cost for the similarity search — trivial
 for realistic knowledge-base sizes (hundreds to low thousands of chunks), computed in memory.
 
+## Meta Business Agents — a separate section
+
+The sidebar has a **Meta Business Agents** section, fully separate from the agents you build
+and run on this platform above. These agents are configured here but actually *hosted and
+run entirely on Meta's own infrastructure*, via the BizAI WA Enterprise 3P API — this
+platform is just a dashboard that pushes configuration to Meta, not the thing answering
+messages.
+
+Built directly from a provided Postman collection, so every request this platform sends
+matches Meta's actual API exactly (verified against the collection during development —
+same endpoints, same headers, same body shapes).
+
+**Per agent, you can configure:**
+- **Setup** — entity ID + access token, then **Onboard** to register the agent with Meta
+  and receive an agent ID (required before anything else below can be pushed).
+- **Settings & Go-Live** — handoff/follow-up behavior, AI audience, and a **Go Live** /
+  **Take Offline** toggle that flips the agent's rollout status directly on Meta.
+- **Business Info** — description, payment methods, return policy, shipping, contact
+  details — the structured fields Meta's agent draws on to answer.
+- **FAQs** — simple question/answer pairs, pushed individually as you add them.
+- **Skills** — named markdown instruction documents (Meta's equivalent of system-prompt
+  sections/guardrails). Common titles used in practice — identity, communication-style,
+  handoff-guardrails, safety-rules, and others — are shown as suggestions, but you can use
+  any title.
+- **Connectors & Tools** — link the agent to an external API (e.g. a Shopify store) as a
+  connector, then define individual callable tools on it (e.g. "create a cart"). Each tool
+  has a **test-run** button that fires the real call through Meta so you can verify it works
+  before the agent relies on it in a live conversation.
+
+**What's tracked as "synced"**: every piece of config shows whether it's actually been
+pushed to Meta or just saved locally — pushes happen automatically when you save/add
+something, so in practice everything should show synced unless a push failed (the error
+message will say why).
+
+**Not wired in yet** (visible in the source Postman collection, straightforward to add
+following the same pattern): WhatsApp number registration (the `graph.facebook.com`
+PIN-based endpoint), Thread Control, and the Agent Eval/test-case framework.
+
 ## Security notes
 
 
