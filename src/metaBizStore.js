@@ -246,7 +246,7 @@ async function createTool(slug, connectorId, { name, description, requestDefinit
   const toolRow = rows[0];
 
   const result = await metaBizClient.createTool(buildAgentContext(row), connectorRow.remote_connector_id, {
-    name, description: description || '', request_definition: parsedDef,
+    name, description: description || '', user_auth_required: false, request_definition: parsedDef,
   });
   const remoteToolId = result.id || result.tool_id || null;
   await db.query('UPDATE meta_biz_agent_tools SET remote_tool_id = $1, synced = true WHERE id = $2', [remoteToolId, toolRow.id]);
