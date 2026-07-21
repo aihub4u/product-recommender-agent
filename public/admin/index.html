@@ -398,6 +398,10 @@
   let metaBizSlug = null;
   let metaBizTab = null;
   let metaBizDetail = null;
+  let editingSkillId = null;
+  let editingConnectorId = null;
+  let editingToolConnectorId = null;
+  let editingToolId = null;
 
   const $ = (id) => document.getElementById(id);
 
@@ -1194,6 +1198,7 @@
   });
 
   async function selectMetaBizAgent(slug) {
+    if (metaBizSlug !== slug) { editingSkillId = null; editingConnectorId = null; editingToolConnectorId = null; editingToolId = null; }
     metaBizSlug = slug;
     metaBizTab = 'setup';
     const detail = await metaApi('/agents/' + slug);
@@ -1341,7 +1346,12 @@
       '<div class="card"><h3>Add FAQ</h3>' +
       '<div class="field"><label>Question</label><input id="mb_faqQuestion" placeholder="What are your hours?" /></div>' +
       '<div class="field"><label>Answer</label><textarea id="mb_faqAnswer" placeholder="Mon-Sat, 9:30 AM-6:30 PM IST"></textarea></div>' +
-      '<div class="save-row"><button class="btn btn-primary" id="addFaqBtn">Add &amp; push</button><span class="save-msg" id="faqMsg"></span></div></div>';
+      '<div class="save-row"><button class="btn btn-primary" id="addFaqBtn">Add &amp; push</button><span class="save-msg" id="faqMsg"></span></div></div>' +
+      '<div class="card"><h3>Bulk upload from CSV</h3>' +
+      '<div class="hint" style="margin-bottom:10px;">Two columns: <code class="mono">question</code> and <code class="mono">answer</code> (header names matched case-insensitively). Each row is pushed to Meta individually — rows with a missing question or answer are skipped and reported, they won\'t block the rest. Max 100 rows per upload.</div>' +
+      '<input type="file" id="mb_faqCsvInput" accept=".csv" style="margin-bottom:10px;" />' +
+      '<div class="save-row"><button class="btn btn-secondary" id="uploadFaqCsvBtn">Upload &amp; push all</button><span class="save-msg" id="faqCsvMsg"></span></div>' +
+      '<div id="faqCsvResult" style="margin-top:10px;"></div></div>';
 
     $('addFaqBtn').addEventListener('click', async () => {
       try {
@@ -1355,6 +1365,24 @@
         selectMetaBizAgent(metaBizSlug);
       });
     });
+    $('uploadFaqCsvBtn').addEventListener('click', async () => {
+      const fileInput = $('mb_faqCsvInput');
+      if (!fileInput.files[0]) { $('faqCsvMsg').textContent = 'Choose a CSV file first.'; return; }
+      $('faqCsvMsg').textContent = 'Uploading and pushing each row…';
+      try {
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        const res = await fetch(METABIZ_API + '/agents/' + metaBizSlug + '/faqs/bulk-upload', { method: 'POST', credentials: 'include', body: formData });
+        const result = await res.json();
+        if (!res.ok) throw new Error(result.error || 'Upload failed.');
+        $('faqCsvMsg').textContent = 'Done.';
+        const failedHtml = result.failed.length
+          ? '<div class="hint" style="color:var(--amber); margin-top:6px;">' + result.failed.length + ' row(s) skipped: ' + result.failed.map((f) => escapeHtml(f.error)).join('; ') + '</div>'
+          : '';
+        $('faqCsvResult').innerHTML = '<div class="badge badge-green">' + result.added.length + ' added</div> ' + failedHtml;
+        setTimeout(() => selectMetaBizAgent(metaBizSlug), 1200);
+      } catch (e) { $('faqCsvMsg').textContent = e.message; $('faqCsvMsg').style.color = 'var(--red)'; }
+    });
   }
 
   const SKILL_TITLE_SUGGESTIONS = ['identity', 'communication-style', 'handoff-guardrails', 'safety-rules', 'capability-disclaimer', 'api-error-handling', 'response-strategy', 'reading-faq', 'media-handling', 'intent-router', 'product-search-flow'];
@@ -1363,26 +1391,43 @@
     const rows = detail.skills.map((s) => (
       '<div class="card" style="margin-bottom:8px;"><div style="display:flex; justify-content:space-between; gap:12px;">' +
         '<div style="min-width:0;"><div class="mono" style="font-weight:700; color:#fff; margin-bottom:4px;">' + escapeHtml(s.title) + '</div><div class="hint" style="max-height:60px; overflow:hidden;">' + escapeHtml((s.skill || '').slice(0, 200)) + '…</div></div>' +
-        '<button class="btn btn-danger meta-skill-delete" data-id="' + s.id + '" style="flex-shrink:0;">Delete</button>' +
+        '<div style="display:flex; gap:6px; flex-shrink:0;">' +
+          '<button class="btn btn-secondary meta-skill-edit" data-id="' + s.id + '">Edit</button>' +
+          '<button class="btn btn-danger meta-skill-delete" data-id="' + s.id + '">Delete</button>' +
+        '</div>' +
       '</div></div>'
     )).join('');
+
+    const editing = editingSkillId ? detail.skills.find((s) => s.id === editingSkillId) : null;
+
     el.innerHTML =
       '<div class="hint" style="margin-bottom:14px;">Skills are named markdown instruction documents — Meta\'s equivalent of guardrails/system-prompt sections. Common titles used in practice: ' + SKILL_TITLE_SUGGESTIONS.map((t) => '<code class="mono">' + t + '</code>').join(', ') + '.</div>' +
       (detail.skills.length ? rows : '<div class="hint">No skills added yet.</div>') +
-      '<div class="card"><h3>Add skill</h3>' +
-      '<div class="field"><label>Title</label><input id="mb_skillTitle" placeholder="e.g. identity" /></div>' +
-      '<div class="field"><label>Description (optional)</label><input id="mb_skillDescription" placeholder="Apply for: identity" /></div>' +
-      '<div class="field"><label>Skill content (markdown)</label><textarea id="mb_skillContent" style="min-height:160px;" placeholder="# Identity&#10;&#10;You are..."></textarea></div>' +
-      '<div class="save-row"><button class="btn btn-primary" id="addSkillBtn">Add &amp; push</button><span class="save-msg" id="skillMsg"></span></div></div>';
+      '<div class="card"><h3>' + (editing ? 'Edit skill' : 'Add skill') + '</h3>' +
+      '<div class="field"><label>Title</label><input id="mb_skillTitle" value="' + escapeHtml(editing ? editing.title : '') + '" placeholder="e.g. identity" /></div>' +
+      '<div class="field"><label>Description (optional)</label><input id="mb_skillDescription" value="' + escapeHtml(editing ? (editing.description || '') : '') + '" placeholder="Apply for: identity" /></div>' +
+      '<div class="field"><label>Skill content (markdown)</label><textarea id="mb_skillContent" style="min-height:160px;" placeholder="# Identity&#10;&#10;You are...">' + escapeHtml(editing ? editing.skill : '') + '</textarea></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="addSkillBtn">' + (editing ? 'Save changes' : 'Add & push') + '</button>' +
+      (editing ? '<button class="btn btn-secondary" id="cancelSkillEditBtn">Cancel</button>' : '') +
+      '<span class="save-msg" id="skillMsg"></span></div></div>';
 
     $('addSkillBtn').addEventListener('click', async () => {
       try {
-        await metaApi('/agents/' + metaBizSlug + '/skills', {
-          method: 'POST',
-          body: { title: $('mb_skillTitle').value.trim(), description: $('mb_skillDescription').value.trim(), skill: $('mb_skillContent').value.trim() },
-        });
+        const body = { title: $('mb_skillTitle').value.trim(), description: $('mb_skillDescription').value.trim(), skill: $('mb_skillContent').value.trim() };
+        if (editingSkillId) {
+          await metaApi('/agents/' + metaBizSlug + '/skills/' + editingSkillId, { method: 'PUT', body });
+        } else {
+          await metaApi('/agents/' + metaBizSlug + '/skills', { method: 'POST', body });
+        }
+        editingSkillId = null;
         selectMetaBizAgent(metaBizSlug);
       } catch (e) { $('skillMsg').textContent = e.message; $('skillMsg').style.color = 'var(--red)'; }
+    });
+    const cancelBtn = $('cancelSkillEditBtn');
+    if (cancelBtn) cancelBtn.addEventListener('click', () => { editingSkillId = null; renderMetaSkillsTab(el, detail); });
+
+    document.querySelectorAll('.meta-skill-edit').forEach((btn) => {
+      btn.addEventListener('click', () => { editingSkillId = btn.dataset.id; renderMetaSkillsTab(el, detail); });
     });
     document.querySelectorAll('.meta-skill-delete').forEach((btn) => {
       btn.addEventListener('click', async () => {
@@ -1393,13 +1438,20 @@
   }
 
   function renderMetaConnectorsTab(el, detail) {
+    const editingConn = editingConnectorId ? detail.connectors.find((c) => c.id === editingConnectorId) : null;
+
     const connectorBlocks = detail.connectors.map((c) => {
+      const editingThisConnectorsTool = editingToolConnectorId === c.id ? c.tools.find((t) => t.id === editingToolId) : null;
+
       const toolRows = c.tools.map((t) => (
         '<div class="card" style="margin:8px 0; background:rgba(255,255,255,0.015);">' +
           '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
             '<div><div class="mono" style="font-weight:700; color:#fff;">' + escapeHtml(t.name) + '</div><div class="hint">' + escapeHtml(t.description || '') + '</div>' +
             (t.synced ? '<span class="badge badge-green" style="margin-top:6px;">synced</span>' : '<span class="badge badge-grey" style="margin-top:6px;">not synced</span>') + '</div>' +
-            '<button class="btn btn-danger meta-tool-delete" data-connector="' + c.id + '" data-tool="' + t.id + '" style="flex-shrink:0;">Delete</button>' +
+            '<div style="display:flex; gap:6px; flex-shrink:0;">' +
+              (t.synced ? '<button class="btn btn-secondary meta-tool-edit" data-connector="' + c.id + '" data-tool="' + t.id + '">Edit</button>' : '') +
+              '<button class="btn btn-danger meta-tool-delete" data-connector="' + c.id + '" data-tool="' + t.id + '">Delete</button>' +
+            '</div>' +
           '</div>' +
           (t.synced ? (
             '<div style="margin-top:10px;"><label style="font-size:11px; color:var(--ink-faint); text-transform:uppercase;">Test input (JSON)</label>' +
@@ -1410,23 +1462,33 @@
         '</div>'
       )).join('');
 
+      const toolFormLabel = editingThisConnectorsTool ? 'Edit tool' : 'Add tool';
+      const toolFormTitle = editingThisConnectorsTool ? editingThisConnectorsTool.name : '';
+      const toolFormDesc = editingThisConnectorsTool ? editingThisConnectorsTool.description : '';
+      const toolFormDef = editingThisConnectorsTool ? JSON.stringify(editingThisConnectorsTool.requestDefinition, null, 2) : '';
+
       return '<div class="card" style="margin-bottom:14px;">' +
         '<div style="display:flex; justify-content:space-between; align-items:flex-start;">' +
           '<div><div style="font-weight:700; color:#fff;">' + escapeHtml(c.name) + '</div><div class="hint">' + escapeHtml(c.description || '') + '</div>' +
           '<div class="mono hint" style="margin-top:4px;">' + escapeHtml(c.baseUrl) + '</div>' +
           (c.synced ? '<span class="badge badge-green" style="margin-top:6px;">synced</span>' : '<span class="badge badge-grey" style="margin-top:6px;">not synced</span>') + '</div>' +
-          '<button class="btn btn-danger meta-connector-delete" data-id="' + c.id + '">Delete</button>' +
+          '<div style="display:flex; gap:6px; flex-shrink:0;">' +
+            (c.synced ? '<button class="btn btn-secondary meta-connector-edit" data-id="' + c.id + '">Edit</button>' : '') +
+            '<button class="btn btn-danger meta-connector-delete" data-id="' + c.id + '">Delete</button>' +
+          '</div>' +
         '</div>' +
         toolRows +
         (c.synced ? (
           '<div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--glass-line);">' +
-          '<label style="font-size:11px; color:var(--ink-faint); text-transform:uppercase;">Add tool</label>' +
-          '<input class="mb-tool-name" data-connector="' + c.id + '" placeholder="tool name, e.g. create_cart" style="margin:6px 0;" />' +
-          '<input class="mb-tool-desc" data-connector="' + c.id + '" placeholder="When should the model use this?" style="margin-bottom:6px;" />' +
-          '<textarea class="mb-tool-def" data-connector="' + c.id + '" style="min-height:100px;" placeholder=\'{"method":"POST","path":"/graphql.json","body":{"content_type":"application/json","params":{}}}\'></textarea>' +
-          '<button class="btn btn-secondary mb-add-tool-btn" data-connector="' + c.id + '" style="margin-top:8px;">Add tool &amp; push</button>' +
-          '<span class="save-msg mb-tool-msg" data-connector="' + c.id + '" style="margin-left:8px;"></span>' +
-          '</div>'
+          '<label style="font-size:11px; color:var(--ink-faint); text-transform:uppercase;">' + toolFormLabel + '</label>' +
+          '<input class="mb-tool-name" data-connector="' + c.id + '" value="' + escapeHtml(toolFormTitle) + '" placeholder="tool name, e.g. create_cart" style="margin:6px 0;" />' +
+          '<input class="mb-tool-desc" data-connector="' + c.id + '" value="' + escapeHtml(toolFormDesc) + '" placeholder="When should the model use this?" style="margin-bottom:6px;" />' +
+          '<textarea class="mb-tool-def" data-connector="' + c.id + '" style="min-height:100px;" placeholder=\'{"method":"POST","path":"/graphql.json","body":{"content_type":"application/json","params":{}}}\'>' + escapeHtml(toolFormDef) + '</textarea>' +
+          '<div class="save-row" style="margin-top:8px;">' +
+          '<button class="btn btn-secondary mb-add-tool-btn" data-connector="' + c.id + '">' + (editingThisConnectorsTool ? 'Save tool changes' : 'Add tool & push') + '</button>' +
+          (editingThisConnectorsTool ? '<button class="btn btn-secondary mb-cancel-tool-edit" data-connector="' + c.id + '">Cancel</button>' : '') +
+          '<span class="save-msg mb-tool-msg" data-connector="' + c.id + '"></span>' +
+          '</div></div>'
         ) : '') +
       '</div>';
     }).join('');
@@ -1434,30 +1496,40 @@
     el.innerHTML =
       '<div class="hint" style="margin-bottom:16px;">Connectors link this agent to an external API (e.g. Shopify); tools are the individual callable actions on that connector — the model decides when to call them based on each tool\'s description, same idea as this platform\'s own Skills feature.</div>' +
       (detail.connectors.length ? connectorBlocks : '<div class="hint">No connectors yet.</div>') +
-      '<div class="card"><h3>Add connector</h3>' +
-      '<div class="field"><label>Name</label><input id="mb_connName" placeholder="shopifycartconnector" /></div>' +
-      '<div class="field"><label>Description</label><input id="mb_connDesc" placeholder="Connects to the Shopify Storefront API to create a cart." /></div>' +
-      '<div class="field"><label>Base URL</label><input id="mb_connBaseUrl" placeholder="https://yourstore.myshopify.com/api/2026-04" /></div>' +
+      '<div class="card"><h3>' + (editingConn ? 'Edit connector' : 'Add connector') + '</h3>' +
+      '<div class="field"><label>Name</label><input id="mb_connName" value="' + escapeHtml(editingConn ? editingConn.name : '') + '" placeholder="shopifycartconnector" /></div>' +
+      '<div class="field"><label>Description</label><input id="mb_connDesc" value="' + escapeHtml(editingConn ? (editingConn.description || '') : '') + '" placeholder="Connects to the Shopify Storefront API to create a cart." /></div>' +
+      '<div class="field"><label>Base URL</label><input id="mb_connBaseUrl" value="' + escapeHtml(editingConn ? editingConn.baseUrl : '') + '" placeholder="https://yourstore.myshopify.com/api/2026-04" /></div>' +
       '<div class="row-2">' +
-        '<div class="field"><label>Auth type</label><select id="mb_connAuthType"><option value="API_KEY">API Key</option><option value="NONE">None</option></select></div>' +
-        '<div class="field"><label>Header name</label><input id="mb_connAuthHeader" placeholder="X-Shopify-Storefront-Access-Token" /></div>' +
+        '<div class="field"><label>Auth type</label><select id="mb_connAuthType"><option value="API_KEY"' + (!editingConn || editingConn.authType === 'API_KEY' ? ' selected' : '') + '>API Key</option><option value="NONE"' + (editingConn && editingConn.authType === 'NONE' ? ' selected' : '') + '>None</option></select></div>' +
+        '<div class="field"><label>Header name</label><input id="mb_connAuthHeader" value="' + escapeHtml(editingConn ? (editingConn.authHeaderName || '') : '') + '" placeholder="X-Shopify-Storefront-Access-Token" /></div>' +
       '</div>' +
-      '<div class="field"><label>Auth value</label><input id="mb_connAuthValue" type="password" placeholder="secret token" /></div>' +
-      '<div class="save-row"><button class="btn btn-primary" id="addConnectorBtn">Add &amp; push</button><span class="save-msg" id="connectorMsg"></span></div></div>';
+      '<div class="field"><label>Auth value ' + (editingConn && editingConn.hasAuthValue ? '(saved — leave blank to keep the current value)' : '') + '</label><input id="mb_connAuthValue" type="password" placeholder="' + (editingConn && editingConn.hasAuthValue ? 'paste to replace' : 'secret token') + '" /></div>' +
+      '<div class="save-row"><button class="btn btn-primary" id="addConnectorBtn">' + (editingConn ? 'Save changes' : 'Add & push') + '</button>' +
+      (editingConn ? '<button class="btn btn-secondary" id="cancelConnectorEditBtn">Cancel</button>' : '') +
+      '<span class="save-msg" id="connectorMsg"></span></div></div>';
 
     $('addConnectorBtn').addEventListener('click', async () => {
       try {
-        await metaApi('/agents/' + metaBizSlug + '/connectors', {
-          method: 'POST',
-          body: {
-            name: $('mb_connName').value.trim(), description: $('mb_connDesc').value.trim(), baseUrl: $('mb_connBaseUrl').value.trim(),
-            authType: $('mb_connAuthType').value, authHeaderName: $('mb_connAuthHeader').value.trim(), authValue: $('mb_connAuthValue').value.trim(),
-          },
-        });
+        const body = {
+          name: $('mb_connName').value.trim(), description: $('mb_connDesc').value.trim(), baseUrl: $('mb_connBaseUrl').value.trim(),
+          authType: $('mb_connAuthType').value, authHeaderName: $('mb_connAuthHeader').value.trim(), authValue: $('mb_connAuthValue').value.trim(),
+        };
+        if (editingConnectorId) {
+          await metaApi('/agents/' + metaBizSlug + '/connectors/' + editingConnectorId, { method: 'PUT', body });
+        } else {
+          await metaApi('/agents/' + metaBizSlug + '/connectors', { method: 'POST', body });
+        }
+        editingConnectorId = null;
         selectMetaBizAgent(metaBizSlug);
       } catch (e) { $('connectorMsg').textContent = e.message; $('connectorMsg').style.color = 'var(--red)'; }
     });
+    const cancelConnBtn = $('cancelConnectorEditBtn');
+    if (cancelConnBtn) cancelConnBtn.addEventListener('click', () => { editingConnectorId = null; renderMetaConnectorsTab(el, detail); });
 
+    document.querySelectorAll('.meta-connector-edit').forEach((btn) => {
+      btn.addEventListener('click', () => { editingConnectorId = btn.dataset.id; renderMetaConnectorsTab(el, detail); });
+    });
     document.querySelectorAll('.meta-connector-delete').forEach((btn) => {
       btn.addEventListener('click', async () => {
         if (!confirm('Delete this connector and its tools from the dashboard?')) return;
@@ -1471,6 +1543,16 @@
         selectMetaBizAgent(metaBizSlug);
       });
     });
+    document.querySelectorAll('.meta-tool-edit').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        editingToolConnectorId = btn.dataset.connector;
+        editingToolId = btn.dataset.tool;
+        renderMetaConnectorsTab(el, detail);
+      });
+    });
+    document.querySelectorAll('.mb-cancel-tool-edit').forEach((btn) => {
+      btn.addEventListener('click', () => { editingToolConnectorId = null; editingToolId = null; renderMetaConnectorsTab(el, detail); });
+    });
     document.querySelectorAll('.mb-add-tool-btn').forEach((btn) => {
       btn.addEventListener('click', async () => {
         const cid = btn.dataset.connector;
@@ -1480,9 +1562,13 @@
         const msgEl = document.querySelector('.mb-tool-msg[data-connector="' + cid + '"]');
         try {
           const requestDefinition = JSON.parse(defInput.value.trim() || '{}');
-          await metaApi('/agents/' + metaBizSlug + '/connectors/' + cid + '/tools', {
-            method: 'POST', body: { name: nameInput.value.trim(), description: descInput.value.trim(), requestDefinition },
-          });
+          const body = { name: nameInput.value.trim(), description: descInput.value.trim(), requestDefinition };
+          if (editingToolConnectorId === cid && editingToolId) {
+            await metaApi('/agents/' + metaBizSlug + '/connectors/' + cid + '/tools/' + editingToolId, { method: 'PUT', body });
+          } else {
+            await metaApi('/agents/' + metaBizSlug + '/connectors/' + cid + '/tools', { method: 'POST', body });
+          }
+          editingToolConnectorId = null; editingToolId = null;
           selectMetaBizAgent(metaBizSlug);
         } catch (e) { msgEl.textContent = e.message; msgEl.style.color = 'var(--red)'; }
       });

@@ -311,6 +311,13 @@ message will say why).
 following the same pattern): WhatsApp number registration (the `graph.facebook.com`
 PIN-based endpoint), Thread Control, and the Agent Eval/test-case framework.
 
+**Editing**:
+- **Skills** — full edit support. Meta's skills are keyed by `title` (the create call has no separate ID), so editing re-posts the same title with new content, which upserts on Meta's side. Confirmed safe: the local row updates in place rather than duplicating.
+- **Connectors & Tools** — edit buttons are there, but **the underlying Meta endpoints are unconfirmed**. Meta's Postman collection only showed `create` for these, no `update`. Editing sends a `PUT` to the same resource, by analogy to the `PUT` convention Meta uses elsewhere (settings, business info) — if Meta doesn't actually support this, you'll get a clear error (likely a 404) rather than silent corruption, and the fix would be delete-and-recreate instead. Worth testing once against a real (non-critical) connector before relying on it for something live.
+- **FAQs** — no edit, matching Meta's own API (no update endpoint, same as no delete endpoint). Delete + re-add is the workaround, same caveat as before about it only removing the local record.
+
+**Bulk FAQ import**: the FAQs tab has a CSV upload — two columns, `question` and `answer` (header names matched case-insensitively), up to 100 rows per upload. Each row pushes to Meta individually since that's how Meta's FAQ endpoint works (one pair per call); a bad row (missing question or answer) is skipped and reported, it won't fail the whole batch.
+
 ## Security notes
 
 

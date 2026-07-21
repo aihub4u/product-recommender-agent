@@ -1,6 +1,10 @@
 const express = require('express');
+const multer = require('multer');
+const { parse: parseCsv } = require('csv-parse/sync');
 const auth = require('../auth');
 const metaBizStore = require('../metaBizStore');
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024 } });
 
 const router = express.Router();
 router.use(auth.requireAdmin);
@@ -65,6 +69,30 @@ router.post('/agents/:slug/faqs', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+router.post('/agents/:slug/faqs/bulk-upload', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No CSV file uploaded.' });
+
+    let records;
+    try {
+      records = parseCsv(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true });
+    } catch (e) {
+      return res.status(400).json({ error: `Could not parse CSV: ${e.message}` });
+    }
+
+    // Header names matched case-insensitively — accepts "Question"/"question"/"Q" etc.
+    const faqPairs = records.map((r) => {
+      const keys = Object.keys(r);
+      const qKey = keys.find((k) => /^q(uestion)?$/i.test(k.trim())) || keys[0];
+      const aKey = keys.find((k) => /^a(nswer)?$/i.test(k.trim())) || keys[1];
+      return { question: r[qKey] || '', answer: r[aKey] || '' };
+    });
+
+    const result = await metaBizStore.addFaqsBulk(req.params.slug, faqPairs);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 router.delete('/agents/:slug/faqs/:faqId', async (req, res) => {
   try {
     await metaBizStore.deleteFaqLocal(req.params.slug, req.params.faqId);
@@ -75,6 +103,12 @@ router.delete('/agents/:slug/faqs/:faqId', async (req, res) => {
 router.post('/agents/:slug/skills', async (req, res) => {
   try {
     res.json({ skill: await metaBizStore.addSkill(req.params.slug, req.body || {}) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/agents/:slug/skills/:skillId', async (req, res) => {
+  try {
+    res.json({ skill: await metaBizStore.updateSkill(req.params.slug, req.params.skillId, req.body || {}) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
@@ -91,6 +125,12 @@ router.post('/agents/:slug/connectors', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+router.put('/agents/:slug/connectors/:connectorId', async (req, res) => {
+  try {
+    res.json({ connector: await metaBizStore.updateConnector(req.params.slug, req.params.connectorId, req.body || {}) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 router.delete('/agents/:slug/connectors/:connectorId', async (req, res) => {
   try {
     await metaBizStore.deleteConnectorLocal(req.params.slug, req.params.connectorId);
@@ -101,6 +141,12 @@ router.delete('/agents/:slug/connectors/:connectorId', async (req, res) => {
 router.post('/agents/:slug/connectors/:connectorId/tools', async (req, res) => {
   try {
     res.json({ tool: await metaBizStore.createTool(req.params.slug, req.params.connectorId, req.body || {}) });
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/agents/:slug/connectors/:connectorId/tools/:toolId', async (req, res) => {
+  try {
+    res.json({ tool: await metaBizStore.updateTool(req.params.slug, req.params.connectorId, req.params.toolId, req.body || {}) });
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 

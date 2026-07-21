@@ -177,6 +177,32 @@ async function deleteFaqLocal(slug, faqId) {
   await db.query('DELETE FROM meta_biz_agent_faqs WHERE id = $1 AND agent_id = $2', [faqId, row.id]);
 }
 
+const MAX_BULK_FAQS = 100;
+
+// Meta's FAQ endpoint only accepts one Q&A pair per call, so a CSV import
+// is just addFaq() looped — one row failing doesn't stop the rest.
+async function addFaqsBulk(slug, faqPairs) {
+  if (!Array.isArray(faqPairs) || faqPairs.length === 0) throw new Error('No FAQ rows found to import.');
+  if (faqPairs.length > MAX_BULK_FAQS) throw new Error(`Too many rows (${faqPairs.length}) — split into batches of ${MAX_BULK_FAQS} or fewer.`);
+
+  const results = { added: [], failed: [] };
+  for (const pair of faqPairs) {
+    const question = (pair.question || '').trim();
+    const answer = (pair.answer || '').trim();
+    if (!question || !answer) {
+      results.failed.push({ question, answer, error: 'Missing question or answer.' });
+      continue;
+    }
+    try {
+      const faq = await addFaq(slug, { question, answer });
+      results.added.push(faq);
+    } catch (err) {
+      results.failed.push({ question, answer, error: err.message });
+    }
+  }
+  return results;
+}
+
 async function addSkill(slug, { title, description, skill }) {
   const row = await getAgentRow(slug);
   if (!row.agent_id) throw new Error('Onboard the agent before adding skills.');
@@ -188,6 +214,19 @@ async function addSkill(slug, { title, description, skill }) {
   await metaBizClient.addSkill(buildAgentContext(row), { title, description, skill });
   await db.query('UPDATE meta_biz_agent_skills SET synced = true WHERE id = $1', [rows[0].id]);
   return { id: rows[0].id, title, description, skill, synced: true };
+}
+
+// Skills are keyed by "title" on Meta's side (create calls never reference
+// or return a separate id) — re-posting the same title with new content is
+// how you update one. Meta's API is the same POST endpoint either way.
+async function updateSkill(slug, skillId, { title, description, skill }) {
+  const row = await getAgentRow(slug);
+  if (!row.agent_id) throw new Error('Onboard the agent before editing skills.');
+  if (!title || !skill) throw new Error('Both title and skill content are required.');
+  await db.query('UPDATE meta_biz_agent_skills SET title=$1, description=$2, skill_markdown=$3, synced=false WHERE id=$4 AND agent_id=$5', [title, description || '', skill, skillId, row.id]);
+  await metaBizClient.addSkill(buildAgentContext(row), { title, description, skill });
+  await db.query('UPDATE meta_biz_agent_skills SET synced = true WHERE id = $1', [skillId]);
+  return { id: skillId, title, description, skill, synced: true };
 }
 
 async function deleteSkillLocal(slug, skillId) {
@@ -221,6 +260,30 @@ async function createConnector(slug, { name, description, baseUrl, authType, aut
 async function deleteConnectorLocal(slug, connectorId) {
   const row = await getAgentRow(slug);
   await db.query('DELETE FROM meta_biz_agent_connectors WHERE id = $1 AND agent_id = $2', [connectorId, row.id]);
+}
+
+// Best-effort — see the "NOT CONFIRMED" note on metaBizClient.updateConnector.
+async function updateConnector(slug, connectorId, { name, description, baseUrl, authType, authHeaderName, authValue }) {
+  const row = await getAgentRow(slug);
+  const connectorRow = await getConnectorRow(row.id, connectorId);
+  if (!connectorRow.remote_connector_id) throw new Error('This connector was never synced to Meta, so there is nothing to update remotely — delete and re-add it instead.');
+  if (!name || !baseUrl) throw new Error('Connector name and base URL are required.');
+
+  const fields = ['name=$1', 'description=$2', 'base_url=$3', 'auth_type=$4', 'auth_header_name=$5'];
+  const values = [name, description || '', baseUrl, authType || 'API_KEY', authHeaderName || ''];
+  let i = 6;
+  if (authValue) { fields.push(`auth_value_enc=$${i++}`); values.push(cryptoHelper.encrypt(authValue)); }
+  fields.push('synced=false');
+  values.push(connectorId, row.id);
+  await db.query(`UPDATE meta_biz_agent_connectors SET ${fields.join(', ')} WHERE id=$${i++} AND agent_id=$${i}`, values);
+
+  const body = { name, description: description || '', base_url: baseUrl, auth_type: authType || 'API_KEY', requires_certificate: false };
+  if ((authType || 'API_KEY') === 'API_KEY' && authValue) {
+    body.auth_config = { api_key: { headers: [{ field_name: authHeaderName || 'Authorization', value: authValue, prefix: '' }] } };
+  }
+  await metaBizClient.updateConnector(buildAgentContext(row), connectorRow.remote_connector_id, body);
+  await db.query('UPDATE meta_biz_agent_connectors SET synced = true WHERE id = $1', [connectorId]);
+  return { id: connectorId, name, description, baseUrl, authType, remoteConnectorId: connectorRow.remote_connector_id, synced: true };
 }
 
 async function getConnectorRow(agentDbId, connectorId) {
@@ -257,6 +320,28 @@ async function deleteToolLocal(slug, connectorId, toolId) {
   await db.query('DELETE FROM meta_biz_agent_tools WHERE id = $1 AND connector_id = $2', [toolId, connectorId]);
 }
 
+// Best-effort — see the "NOT CONFIRMED" note on metaBizClient.updateTool.
+async function updateTool(slug, connectorId, toolId, { name, description, requestDefinition }) {
+  const row = await getAgentRow(slug);
+  const connectorRow = await getConnectorRow(row.id, connectorId);
+  const { rows } = await db.query('SELECT * FROM meta_biz_agent_tools WHERE id = $1 AND connector_id = $2', [toolId, connectorId]);
+  if (rows.length === 0) throw new Error('Tool not found.');
+  const toolRow = rows[0];
+  if (!toolRow.remote_tool_id) throw new Error('This tool was never synced to Meta, so there is nothing to update remotely — delete and re-add it instead.');
+  if (!name || !requestDefinition) throw new Error('Tool name and request definition are required.');
+
+  let parsedDef;
+  try { parsedDef = typeof requestDefinition === 'string' ? JSON.parse(requestDefinition) : requestDefinition; }
+  catch (e) { throw new Error('Request definition must be valid JSON.'); }
+
+  await db.query('UPDATE meta_biz_agent_tools SET name=$1, description=$2, request_definition_json=$3, synced=false WHERE id=$4', [name, description || '', JSON.stringify(parsedDef), toolId]);
+  await metaBizClient.updateTool(buildAgentContext(row), connectorRow.remote_connector_id, toolRow.remote_tool_id, {
+    name, description: description || '', user_auth_required: false, request_definition: parsedDef,
+  });
+  await db.query('UPDATE meta_biz_agent_tools SET synced = true WHERE id = $1', [toolId]);
+  return { id: toolId, name, description, requestDefinition: parsedDef, remoteToolId: toolRow.remote_tool_id, synced: true };
+}
+
 async function testTool(slug, connectorId, toolId, inputVars) {
   const row = await getAgentRow(slug);
   const connectorRow = await getConnectorRow(row.id, connectorId);
@@ -270,6 +355,6 @@ async function testTool(slug, connectorId, toolId, inputVars) {
 module.exports = {
   listAgents, createAgent, getAgentDetail, deleteAgent, onboard,
   updateSettingsLocal, pushSettings, saveAndPushBusinessInfo,
-  addFaq, deleteFaqLocal, addSkill, deleteSkillLocal,
-  createConnector, deleteConnectorLocal, createTool, deleteToolLocal, testTool,
+  addFaq, addFaqsBulk, deleteFaqLocal, addSkill, updateSkill, deleteSkillLocal,
+  createConnector, updateConnector, deleteConnectorLocal, createTool, updateTool, deleteToolLocal, testTool,
 };

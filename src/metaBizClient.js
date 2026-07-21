@@ -64,6 +64,15 @@ async function createConnector(agent, connectorBody) {
   return call(agent, { method: 'POST', path: '/agent_connectors/', body: connectorBody, apiVersion: '2.0.0' });
 }
 
+// NOT CONFIRMED against Meta's live API — no update endpoint was present
+// in the source Postman collection, only create. Built by analogy to the
+// PUT convention Meta uses elsewhere (agent_config/settings, business_info).
+// If this 404s, Meta likely has no connector update endpoint and editing
+// would need to go through delete+recreate instead.
+async function updateConnector(agent, remoteConnectorId, connectorBody) {
+  return call(agent, { method: 'PUT', path: `/agent_connectors/${remoteConnectorId}`, body: connectorBody, apiVersion: '2.0.0' });
+}
+
 async function listConnectors(agent) {
   return call(agent, { method: 'GET', path: '/agent_connectors/', apiVersion: '2.0.0' });
 }
@@ -72,6 +81,16 @@ async function createTool(agent, remoteConnectorId, toolBody) {
   return call(agent, {
     method: 'POST',
     path: `/agent_connectors/${remoteConnectorId}/tools`,
+    body: toolBody,
+    apiVersion: '2.0.0',
+  });
+}
+
+// Same caveat as updateConnector above — unconfirmed, best-effort PUT.
+async function updateTool(agent, remoteConnectorId, remoteToolId, toolBody) {
+  return call(agent, {
+    method: 'PUT',
+    path: `/agent_connectors/${remoteConnectorId}/tools/${remoteToolId}`,
     body: toolBody,
     apiVersion: '2.0.0',
   });
@@ -86,4 +105,4 @@ async function runTool(agent, remoteConnectorId, remoteToolId, inputVars) {
   });
 }
 
-module.exports = { onboardAgent, updateSettings, updateBusinessInfo, addFaq, addSkill, createConnector, listConnectors, createTool, runTool };
+module.exports = { onboardAgent, updateSettings, updateBusinessInfo, addFaq, addSkill, createConnector, updateConnector, listConnectors, createTool, updateTool, runTool };
