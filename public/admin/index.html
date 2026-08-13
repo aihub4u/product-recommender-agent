@@ -1133,14 +1133,134 @@
 
   function renderDeployTab(el, detail) {
     const origin = window.location.origin;
+    const url = origin + '/api/' + detail.slug + '/recommend';
+    const healthUrl = origin + '/api/' + detail.slug + '/health';
+
+    const sampleQuery = detail.hasDataSource ? 'something for a wedding under 5000' : 'What are your business hours?';
+    const curlRecommend =
+      'curl -X POST ' + url + ' \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{\n' +
+      '    "query": "' + sampleQuery + '",\n' +
+      '    "sessionId": null\n' +
+      '  }\'';
+
+    const curlFollowUp =
+      'curl -X POST ' + url + ' \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{\n' +
+      '    "query": "under 3000, something festive",\n' +
+      '    "sessionId": "<sessionId from the previous response>"\n' +
+      '  }\'';
+
+    const curlHealth = 'curl ' + healthUrl;
+
+    let sampleResponses, responseFieldsRows;
+    if (detail.hasDataSource) {
+      sampleResponses = [
+        {
+          label: 'Response — needs clarification',
+          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'clarify', question: 'What occasion are you shopping for — festive, wedding, or reception?' }, null, 2),
+        },
+        {
+          label: 'Response — recommendation',
+          json: JSON.stringify({
+            sessionId: '3fa2c1d0-...',
+            action: 'recommend',
+            products: [{ id: 'MYV-0042', name: 'Wine Hued Elegance Lehenga', category: 'Lehenga', price: 8999, description: '...' }],
+            engineUsed: 'llm',
+            reasoning: 'Fits the wedding occasion and budget mentioned.',
+          }, null, 2),
+        },
+        {
+          label: 'Response — blocked by guardrail',
+          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'blocked', message: "Sorry, I can only help with product recommendations for this store." }, null, 2),
+        },
+      ];
+      responseFieldsRows = [
+        ['action', 'string', '"clarify" | "recommend" | "blocked"'],
+        ['sessionId', 'string', 'Pass this back on the next call to continue the same conversation.'],
+        ['question', 'string', 'Only present when action is "clarify".'],
+        ['products', 'array', 'Only present when action is "recommend" — up to the agent\'s configured max, each with id/name/category/price/description.'],
+        ['reasoning', 'string', 'Only present when the LLM engine produced a recommendation (omitted on the rule-based fallback).'],
+        ['engineUsed', 'string', '"llm" or "rule" — which engine actually answered this turn.'],
+        ['message', 'string', 'Only present when action is "blocked" — the configured guardrail reply.'],
+      ];
+    } else {
+      sampleResponses = [
+        {
+          label: 'Response — reply',
+          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'reply', message: "We're open Mon-Sat, 9:30 AM to 6:30 PM IST.", engineUsed: 'llm' }, null, 2),
+        },
+        {
+          label: 'Response — blocked by guardrail',
+          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'blocked', message: "I'll have our team reach out directly." }, null, 2),
+        },
+      ];
+      responseFieldsRows = [
+        ['action', 'string', '"reply" | "blocked"'],
+        ['sessionId', 'string', 'Pass this back on the next call to continue the same conversation.'],
+        ['message', 'string', "The agent's reply text (for \"reply\"), or the configured guardrail message (for \"blocked\")."],
+        ['engineUsed', 'string', '"llm", or "none" if no LLM key is configured yet for this agent.'],
+      ];
+    }
+
+    const healthSample = JSON.stringify({
+      status: 'ok', project: detail.slug, hasDataSource: detail.hasDataSource,
+      engine: detail.llm.provider !== 'none' && detail.llm.apiKeyMasked ? detail.llm.provider : (detail.hasDataSource ? 'rule' : 'none'),
+      productsLoaded: detail.hasDataSource ? (detail.productsLoaded || 0) : null,
+      lastRefreshed: detail.hasDataSource ? '2026-07-20T10:15:00.000Z' : null,
+      lastRefreshError: null,
+    }, null, 2);
+
+    const codeBlock = (id, text) =>
+      '<div style="position:relative;">' +
+      '<pre class="deploy-box" id="' + id + '" style="white-space:pre-wrap; padding-right:70px;">' + escapeHtml(text) + '</pre>' +
+      '<button class="btn btn-secondary copy-btn" data-target="' + id + '" style="position:absolute; top:8px; right:8px; padding:4px 10px; font-size:11px;">Copy</button>' +
+      '</div>';
+
     el.innerHTML =
       '<div class="card"><h3>API endpoints</h3>' +
-      '<div class="deploy-label">Recommend / Chat (POST)</div><div class="deploy-box">' + origin + '/api/' + detail.slug + '/recommend</div>' +
-      '<div class="deploy-label">Health (GET)</div><div class="deploy-box">' + origin + '/api/' + detail.slug + '/health</div>' +
-      '<div class="hint">POST body: <code class="mono">{"query": "...", "sessionId": "optional"}</code></div></div>' +
+      '<div class="deploy-label">Recommend / Chat (POST)</div><div class="deploy-box">' + url + '</div>' +
+      '<div class="deploy-label">Health (GET)</div><div class="deploy-box">' + healthUrl + '</div></div>' +
+
+      '<div class="card"><h3>cURL — first message (no session yet)</h3>' + codeBlock('curl1', curlRecommend) + '</div>' +
+      '<div class="card"><h3>cURL — follow-up (same conversation)</h3>' +
+      '<div class="hint" style="margin-bottom:10px;">Pass the <code class="mono">sessionId</code> from the previous response to keep context across turns.</div>' +
+      codeBlock('curl2', curlFollowUp) + '</div>' +
+
+      '<div class="card"><h3>Sample responses</h3>' +
+      sampleResponses.map((r, i) => '<div class="deploy-label">' + r.label + '</div>' + codeBlock('resp' + i, r.json)).join('') +
+      '</div>' +
+
+      '<div class="card"><h3>Response fields</h3>' +
+      '<table class="usage-table"><thead><tr><th>Field</th><th>Type</th><th>Notes</th></tr></thead><tbody>' +
+      responseFieldsRows.map((r) => '<tr><td class="mono">' + r[0] + '</td><td class="mono">' + r[1] + '</td><td style="font-family:inherit; color:var(--ink-soft);">' + escapeHtml(r[2]) + '</td></tr>').join('') +
+      '</tbody></table></div>' +
+
+      '<div class="card"><h3>Request parameters</h3>' +
+      '<table class="usage-table"><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead><tbody>' +
+      '<tr><td class="mono">query</td><td class="mono">string</td><td>Yes</td><td style="font-family:inherit; color:var(--ink-soft);">The user\'s message.</td></tr>' +
+      '<tr><td class="mono">sessionId</td><td class="mono">string | null</td><td>No</td><td style="font-family:inherit; color:var(--ink-soft);">Omit or pass null on the first message; pass the value returned from the previous response to continue that conversation.</td></tr>' +
+      '</tbody></table></div>' +
+
+      '<div class="card"><h3>cURL — health check</h3>' + codeBlock('curl3', curlHealth) +
+      '<div class="deploy-label" style="margin-top:14px;">Sample response</div>' + codeBlock('resphealth', healthSample) + '</div>' +
+
       '<div class="card"><h3>Test it live</h3><p class="hint" style="margin-bottom:14px;">This is the actual chat UI, wired to this agent\'s API — try it right here.</p>' +
       '<div class="chat-embed-wrap"><div class="chat-embed-frame"><iframe src="/chat/' + detail.slug + '" title="Test chat"></iframe></div></div>' +
       '<div style="text-align:center; margin-top:12px;"><a href="/chat/' + detail.slug + '" target="_blank" class="hint">Open in a full tab ↗</a></div></div>';
+
+    document.querySelectorAll('.copy-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const text = $(btn.dataset.target).textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          const original = btn.textContent;
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = original; }, 1500);
+        });
+      });
+    });
   }
 
   // ============================================================
