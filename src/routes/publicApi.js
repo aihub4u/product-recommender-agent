@@ -127,6 +127,21 @@ router.post('/:slug/recommend', async (req, res) => {
       return res.json({ sessionId: id, action: 'clarify', question: result.question, engineUsed: result.engineUsed });
     }
 
+    // "info" — answering a question/comparison about products already shown.
+    // Does NOT go through the price cap (they're already-approved past
+    // recommendations, not new ones) and does NOT touch shownProductIds
+    // (nothing new was shown).
+    if (result.action === 'info') {
+      session.history.push({ role: 'assistant', content: result.message });
+      return res.json({
+        sessionId: id,
+        action: 'info',
+        message: result.message,
+        products: result.products.map(formatProduct),
+        engineUsed: result.engineUsed,
+      });
+    }
+
     // Guardrail: hard price cap applied on top of whatever the engine picked.
     const cappedProducts = guardrails.applyPriceCap(result.products, project.guardrails);
     if (cappedProducts.length === 0) {
