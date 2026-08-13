@@ -125,8 +125,10 @@ function topCategories(vocabulary, limit = 5) {
  *   { action: 'clarify', question, filters }
  *   { action: 'recommend', products, filters }
  */
-function decide({ query, products, vocabulary, previousFilters, maxRecommendations = 3 }) {
+function decide({ query, products, vocabulary, previousFilters, excludeIds = [], maxRecommendations = 3 }) {
   const filters = extractFilters(query, vocabulary, previousFilters);
+  const excludeSet = new Set(excludeIds);
+  const eligibleProducts = products.filter((p) => !excludeSet.has(p.id));
 
   const hasAnySignal = Boolean(filters.category || (filters.tags && filters.tags.length) || filters.price);
 
@@ -140,14 +142,16 @@ function decide({ query, products, vocabulary, previousFilters, maxRecommendatio
     return { action: 'clarify', question, filters };
   }
 
-  const matched = products
+  const matched = eligibleProducts
     .filter((p) => productMatchesFilters(p, filters))
     .map((p) => ({ product: p, score: scoreProduct(p, filters) }))
     .sort((a, b) => b.score - a.score);
 
   if (matched.length === 0) {
-    const cats = topCategories(vocabulary);
-    const question = `I couldn't find anything matching that. Could you broaden your request${cats.length ? ` — maybe try one of: ${cats.join(', ')}` : ''}, or adjust the price range?`;
+    const stillMatchingButShown = products.some((p) => excludeSet.has(p.id) && productMatchesFilters(p, filters));
+    const question = stillMatchingButShown
+      ? "I've actually shown you everything I have that matches this — want to loosen the budget, style, or category so I can find more?"
+      : `I couldn't find anything matching that. Could you broaden your request${topCategories(vocabulary).length ? ` — maybe try one of: ${topCategories(vocabulary).join(', ')}` : ''}, or adjust the price range?`;
     return { action: 'clarify', question, filters };
   }
 

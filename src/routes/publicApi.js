@@ -110,6 +110,7 @@ router.post('/:slug/recommend', async (req, res) => {
       products: project.products,
       vocabulary: project.vocabulary,
       previousFilters: session.filters,
+      excludeIds: session.shownProductIds || [],
       history: session.history.slice(0, -1),
       llmConfig,
       maxRecommendations,
@@ -138,6 +139,11 @@ router.post('/:slug/recommend', async (req, res) => {
       role: 'assistant',
       content: `Recommended: ${cappedProducts.map((p) => p.name || p.id).join(', ')}`,
     });
+
+    session.shownProductIds = Array.from(new Set([
+      ...(session.shownProductIds || []),
+      ...cappedProducts.map((p) => p.id),
+    ]));
 
     return res.json({
       sessionId: id,

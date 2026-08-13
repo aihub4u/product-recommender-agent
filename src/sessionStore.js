@@ -1,12 +1,12 @@
 const { v4: uuidv4 } = require('uuid');
 const config = require('./globalConfig');
 
-// sessionId -> { projectSlug, history: [{role, content}], filters: {}, createdAt, lastActive }
+// sessionId -> { projectSlug, history: [{role, content}], filters: {}, shownProductIds: [], createdAt, lastActive }
 const sessions = new Map();
 
 function createSession(projectSlug) {
   const id = uuidv4();
-  const session = { projectSlug, history: [], filters: {}, createdAt: Date.now(), lastActive: Date.now() };
+  const session = { projectSlug, history: [], filters: {}, shownProductIds: [], createdAt: Date.now(), lastActive: Date.now() };
   sessions.set(id, session);
   return { id, session };
 }

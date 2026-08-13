@@ -2,14 +2,16 @@ const ruleEngine = require('./ruleEngine');
 const { parseModelJson } = require('./providers');
 const { runWithTools } = require('./toolLoop');
 
-function buildCandidateList(query, products, vocabulary, previousFilters) {
+function buildCandidateList(query, products, vocabulary, previousFilters, excludeIds = []) {
   const filters = ruleEngine.extractFilters(query, vocabulary, previousFilters);
+  const excludeSet = new Set(excludeIds);
+  const notShown = products.filter((p) => !excludeSet.has(p.id));
 
   // HARD gender filter — applied BEFORE scoring, so a wrong-gender product
   // can never enter the pool the LLM sees, regardless of keyword score.
   const genderSafe = filters.gender
-    ? products.filter((p) => p.tagList.includes(filters.gender))
-    : products;
+    ? notShown.filter((p) => p.tagList.includes(filters.gender))
+    : notShown;
 
   const scored = genderSafe
     .map((p) => ({ product: p, score: ruleEngine.scoreProduct(p, filters) }))
@@ -18,9 +20,16 @@ function buildCandidateList(query, products, vocabulary, previousFilters) {
   const withSignal = scored.filter((s) => s.score > 0).map((s) => s.product);
   const pool = withSignal.length >= 8 ? withSignal : genderSafe;
 
-  // Returns filters alongside the pool now, so decide() below can persist
-  // the merged (not stale) filters into session state.
-  return { pool: pool.slice(0, 40), filters };
+  // Detect if exclusion (not gender/other filters) is why the pool is thin —
+  // used below to give an honest "I've shown you everything" message instead
+  // of pretending to search further.
+  const wouldHaveMatchedIfShown = products.some(
+    (p) => excludeSet.has(p.id)
+      && (!filters.gender || p.tagList.includes(filters.gender))
+      && ruleEngine.productMatchesFilters(p, filters),
+  );
+
+  return { pool: pool.slice(0, 40), filters, exhausted: pool.length === 0 && wouldHaveMatchedIfShown };
 }
 
 function condenseProduct(p) {
@@ -73,12 +82,21 @@ function buildUserMessage(query, history, candidates) {
   ].join('\n');
 }
 
-async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [] }) {
+async function decide({ query, products, vocabulary, previousFilters, excludeIds = [], history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [] }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
   }
 
-  const { pool, filters } = buildCandidateList(query, products, vocabulary, previousFilters);
+  const { pool, filters, exhausted } = buildCandidateList(query, products, vocabulary, previousFilters, excludeIds);
+
+  if (exhausted) {
+    return {
+      action: 'clarify',
+      question: "I've actually shown you everything I have that matches this — want to loosen the budget, style, or category so I can find more?",
+      filters,
+    };
+  }
+
   const candidates = pool.map(condenseProduct);
   const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix);
   const userMessage = buildUserMessage(query, history, candidates);
@@ -95,12 +113,14 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
 
   if (parsed.action === 'recommend') {
     const byId = new Map(products.map((p) => [p.id, p]));
+    const excludeSet = new Set(excludeIds);
     const resolved = (parsed.productIds || [])
       .map((id) => byId.get(id))
       .filter(Boolean)
-      // belt-and-suspenders: re-verify gender even on the LLM's chosen ids,
-      // in case it ever picks an id outside the pre-filtered candidate pool
+      // belt-and-suspenders: re-verify gender and non-repetition even on the
+      // LLM's chosen ids, in case it picks something outside the pre-filtered pool
       .filter((p) => !filters.gender || p.tagList.includes(filters.gender))
+      .filter((p) => !excludeSet.has(p.id))
       .slice(0, maxRecommendations);
 
     if (resolved.length === 0) {
