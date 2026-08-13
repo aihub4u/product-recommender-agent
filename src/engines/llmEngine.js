@@ -4,13 +4,23 @@ const { runWithTools } = require('./toolLoop');
 
 function buildCandidateList(query, products, vocabulary, previousFilters) {
   const filters = ruleEngine.extractFilters(query, vocabulary, previousFilters);
-  const scored = products
+
+  // HARD gender filter — applied BEFORE scoring, so a wrong-gender product
+  // can never enter the pool the LLM sees, regardless of keyword score.
+  const genderSafe = filters.gender
+    ? products.filter((p) => p.tagList.includes(filters.gender))
+    : products;
+
+  const scored = genderSafe
     .map((p) => ({ product: p, score: ruleEngine.scoreProduct(p, filters) }))
     .sort((a, b) => b.score - a.score);
 
   const withSignal = scored.filter((s) => s.score > 0).map((s) => s.product);
-  const pool = withSignal.length >= 8 ? withSignal : products;
-  return pool.slice(0, 40);
+  const pool = withSignal.length >= 8 ? withSignal : genderSafe;
+
+  // Returns filters alongside the pool now, so decide() below can persist
+  // the merged (not stale) filters into session state.
+  return { pool: pool.slice(0, 40), filters };
 }
 
 function condenseProduct(p) {
@@ -18,6 +28,7 @@ function condenseProduct(p) {
     id: p.id,
     name: p.name || '',
     category: p.category || '',
+    gender: (p.tagList || []).find((t) => ['men', 'women', 'kids'].includes(t)) || '',
     price: p.priceValue !== null ? p.priceValue : p.price || '',
     description: (p.description || '').slice(0, 200),
     tags: p.tagList,
@@ -67,7 +78,8 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
     throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
   }
 
-  const candidates = buildCandidateList(query, products, vocabulary, previousFilters).map(condenseProduct);
+  const { pool, filters } = buildCandidateList(query, products, vocabulary, previousFilters);
+  const candidates = pool.map(condenseProduct);
   const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix);
   const userMessage = buildUserMessage(query, history, candidates);
 
@@ -78,7 +90,7 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
   const parsed = parseModelJson(rawText);
 
   if (parsed.action === 'clarify') {
-    return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage };
+    return { action: 'clarify', question: parsed.question, filters, usage };
   }
 
   if (parsed.action === 'recommend') {
@@ -86,13 +98,16 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
     const resolved = (parsed.productIds || [])
       .map((id) => byId.get(id))
       .filter(Boolean)
+      // belt-and-suspenders: re-verify gender even on the LLM's chosen ids,
+      // in case it ever picks an id outside the pre-filtered candidate pool
+      .filter((p) => !filters.gender || p.tagList.includes(filters.gender))
       .slice(0, maxRecommendations);
 
     if (resolved.length === 0) {
-      throw new Error('LLM recommended ids not present in catalog');
+      throw new Error('LLM recommended ids not present in catalog or failed gender filter');
     }
 
-    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning, usage };
+    return { action: 'recommend', products: resolved, filters, reasoning: parsed.reasoning, usage };
   }
 
   throw new Error(`Unrecognized LLM action: ${parsed.action}`);
