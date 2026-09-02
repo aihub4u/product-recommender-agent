@@ -318,6 +318,14 @@ PIN-based endpoint), Thread Control, and the Agent Eval/test-case framework.
 
 **Bulk FAQ import**: the FAQs tab has a CSV upload — two columns, `question` and `answer` (header names matched case-insensitively), up to 100 rows per upload. Each row pushes to Meta individually since that's how Meta's FAQ endpoint works (one pair per call); a bad row (missing question or answer) is skipped and reported, it won't fail the whole batch.
 
+**Header-bound parameters**: some real-world APIs (e.g. Apollo 24|7's Get Profile
+API) expect a parameter as a request header rather than in the URL or JSON body.
+Each parameter in a skill's editor has a **"Send as header?"** checkbox — check
+it and give the header name, and that argument's value gets bound into that
+exact header on every call, instead of being interpolated into the URL/body.
+Static headers (like a connector's own API key) and dynamic per-call header
+params can coexist on the same skill.
+
 ## Security notes
 
 

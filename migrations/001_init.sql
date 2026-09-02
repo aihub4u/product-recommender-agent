@@ -71,11 +71,15 @@ CREATE TABLE IF NOT EXISTS project_skills (
   auth_header_name TEXT,
   auth_value_enc TEXT,
   params_json TEXT DEFAULT '[]',
+  header_params_json TEXT DEFAULT '[]',
   body_template TEXT,
   enabled BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Safe to re-run against an existing table from an earlier version.
+ALTER TABLE project_skills ADD COLUMN IF NOT EXISTS header_params_json TEXT DEFAULT '[]';
 
 CREATE INDEX IF NOT EXISTS idx_project_skills_project ON project_skills(project_id);
 

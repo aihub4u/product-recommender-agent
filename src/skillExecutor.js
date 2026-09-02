@@ -96,6 +96,15 @@ async function executeSkill(skill, args, authValue) {
     headers[skill.authHeaderName] = authValue;
   }
 
+  // Per-call dynamic headers — e.g. Apollo's Get Profile API expects
+  // "mobileNumber" as a request header, not a URL or body field. Each
+  // entry maps one of this tool's parameters onto a specific header name.
+  for (const hp of skill.headerParams || []) {
+    if (hp.paramName && hp.headerName && args && args[hp.paramName] !== undefined) {
+      headers[hp.headerName] = String(args[hp.paramName]);
+    }
+  }
+
   const method = (skill.method || 'GET').toUpperCase();
   let body;
   if (['POST', 'PUT', 'PATCH'].includes(method)) {

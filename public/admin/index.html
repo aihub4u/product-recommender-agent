@@ -812,11 +812,17 @@
 
   function renderParamRows() {
     return skillFormParams.map((p, idx) => (
-      '<div class="row-2" style="grid-template-columns: 1.2fr 0.8fr 1.5fr auto auto; align-items:end; margin-bottom:8px;" data-param-row="' + idx + '">' +
+      '<div class="row-2" style="grid-template-columns: 1.1fr 0.7fr 1.3fr auto auto auto; align-items:end; margin-bottom:8px;" data-param-row="' + idx + '">' +
         '<div class="field" style="margin:0;"><label>Name</label><input class="param-name" value="' + escapeHtml(p.name || '') + '" placeholder="orderId" /></div>' +
         '<div class="field" style="margin:0;"><label>Type</label><select class="param-type"><option value="string"' + (p.type === 'string' ? ' selected' : '') + '>string</option><option value="number"' + (p.type === 'number' ? ' selected' : '') + '>number</option><option value="boolean"' + (p.type === 'boolean' ? ' selected' : '') + '>boolean</option></select></div>' +
         '<div class="field" style="margin:0;"><label>Description</label><input class="param-desc" value="' + escapeHtml(p.description || '') + '" placeholder="What this value is" /></div>' +
         '<div class="field" style="margin:0;"><label>Required</label><input type="checkbox" class="param-required" ' + (p.required ? 'checked' : '') + ' style="width:18px; height:18px; margin-top:6px;" /></div>' +
+        '<div class="field" style="margin:0; min-width:150px;"><label>Send as header?</label>' +
+          '<div style="display:flex; gap:6px; align-items:center;">' +
+            '<input type="checkbox" class="param-as-header" ' + (p.asHeader ? 'checked' : '') + ' style="width:16px; height:16px; flex-shrink:0;" title="Bind this value into a request header instead of the URL/body — e.g. Apollo\'s mobileNumber header" />' +
+            '<input class="param-header-name" value="' + escapeHtml(p.headerName || '') + '" placeholder="header name" style="display:' + (p.asHeader ? 'block' : 'none') + ';" />' +
+          '</div>' +
+        '</div>' +
         '<button class="btn btn-ghost param-remove-btn" data-idx="' + idx + '" style="margin-bottom:2px;" title="Remove">✕</button>' +
       '</div>'
     )).join('');
@@ -829,6 +835,11 @@
       row.querySelector('.param-type').addEventListener('change', (e) => { skillFormParams[idx].type = e.target.value; });
       row.querySelector('.param-desc').addEventListener('input', (e) => { skillFormParams[idx].description = e.target.value; });
       row.querySelector('.param-required').addEventListener('change', (e) => { skillFormParams[idx].required = e.target.checked; });
+      row.querySelector('.param-as-header').addEventListener('change', (e) => {
+        skillFormParams[idx].asHeader = e.target.checked;
+        row.querySelector('.param-header-name').style.display = e.target.checked ? 'block' : 'none';
+      });
+      row.querySelector('.param-header-name').addEventListener('input', (e) => { skillFormParams[idx].headerName = e.target.value; });
     });
     container.querySelectorAll('.param-remove-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -847,6 +858,12 @@
   function openSkillEditor(skill) {
     skillFormEditingId = skill ? skill.id : null;
     skillFormParams = skill ? JSON.parse(JSON.stringify(skill.params || [])) : [];
+    if (skill && skill.headerParams && skill.headerParams.length) {
+      const byParamName = new Map(skill.headerParams.map((hp) => [hp.paramName, hp.headerName]));
+      skillFormParams.forEach((p) => {
+        if (byParamName.has(p.name)) { p.asHeader = true; p.headerName = byParamName.get(p.name); }
+      });
+    }
     const wrap = $('skillEditorWrap');
 
     wrap.innerHTML =
@@ -863,6 +880,7 @@
         '<div class="field"><label>URL (use {paramName} for path/query placeholders)</label>' +
           '<input id="sf_url" value="' + escapeHtml(skill ? skill.url : '') + '" placeholder="https://api.example.com/orders/{orderId}" /></div>' +
         '<div class="field"><label>Parameters</label>' +
+          '<div class="hint" style="margin-bottom:8px;">Check "Send as header" for a parameter the API expects as a request header rather than in the URL or body — e.g. Apollo\'s Get Profile API expects <code class="mono">mobileNumber</code> as a header, not a query param.</div>' +
           '<div id="paramRowsWrap">' + renderParamRows() + '</div>' +
           '<button class="btn btn-secondary" id="addParamBtn" type="button">+ Add parameter</button>' +
         '</div>' +
@@ -903,12 +921,17 @@
     syncAuthVisibility(); syncBodyVisibility();
 
     $('saveSkillBtn').addEventListener('click', async () => {
+      const cleanParams = skillFormParams.filter((p) => p.name.trim());
+      const headerParams = cleanParams
+        .filter((p) => p.asHeader && (p.headerName || '').trim())
+        .map((p) => ({ paramName: p.name.trim(), headerName: p.headerName.trim() }));
       const body = {
         name: $('sf_name').value.trim(),
         description: $('sf_description').value.trim(),
         method: $('sf_method').value,
         url: $('sf_url').value.trim(),
-        params: skillFormParams.filter((p) => p.name.trim()),
+        params: cleanParams.map(({ asHeader, headerName, ...rest }) => rest), // strip UI-only fields from the LLM-facing schema
+        headerParams,
         authType: $('sf_authType').value,
         authHeaderName: $('sf_authHeaderName').value.trim(),
         bodyTemplate: $('sf_bodyTemplate').value.trim(),

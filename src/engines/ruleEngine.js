@@ -1,19 +1,3 @@
-const GENDER_KEYWORDS = {
-  men: ['men', 'man', 'mens', "men's", 'male', 'boy', 'boyfriend', 'husband', 'father', 'dad', 'brother', 'son'],
-  women: ['women', 'woman', 'womens', "women's", 'female', 'girl', 'girlfriend', 'wife', 'mother', 'mom', 'sister', 'daughter'],
-  kids: ['kids', 'kid', "kid's", 'child', 'children', "children's", 'baby', 'toddler'],
-};
-
-function detectGender(query) {
-  const q = (query || '').toLowerCase();
-  for (const [gender, words] of Object.entries(GENDER_KEYWORDS)) {
-    if (words.some((w) => new RegExp(`\\b${w.replace(/'/g, "'?")}\\b`).test(q))) {
-      return gender;
-    }
-  }
-  return null;
-}
-
 const PRICE_UNDER_RE = /(under|below|less than|cheaper than|within)\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i;
 const PRICE_OVER_RE = /(over|above|more than|starting from)\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i;
 const PRICE_BETWEEN_RE = /between\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:and|-|to)\s*(?:rs\.?|inr|₹|\$)?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/i;
@@ -47,13 +31,6 @@ function extractFilters(query, vocabulary, previousFilters = {}) {
   const price = parsePriceFilter(query);
   if (price) filters.price = price;
 
-  const detectedGender = detectGender(query);
-  if (detectedGender) {
-    filters.gender = detectedGender; // explicit mention always wins
-  } else if (previousFilters && previousFilters.gender && !filters.gender) {
-    filters.gender = previousFilters.gender; // sticky — carry forward across turns
-  }
-
   const tagMatches = matchVocabularyTerms(query, vocabulary.tags);
   if (tagMatches.length) {
     filters.tags = Array.from(new Set([...(filters.tags || []), ...tagMatches]));
@@ -80,9 +57,6 @@ function extractFilters(query, vocabulary, previousFilters = {}) {
 }
 
 function productMatchesFilters(product, filters) {
-  if (filters.gender && !product.tagList.includes(filters.gender)) {
-    return false;
-  }
   if (filters.category && !product.tagList.includes(filters.category)) {
     return false;
   }
@@ -102,7 +76,6 @@ function scoreProduct(product, filters) {
       if (product.tagList.includes(tag)) score += 3;
     }
   }
-  if (filters.gender && product.tagList.includes(filters.gender)) score += 3;
   if (filters.category && product.tagList.includes(filters.category)) score += 3;
   if (filters.keywords) {
     for (const kw of filters.keywords) {
@@ -125,10 +98,8 @@ function topCategories(vocabulary, limit = 5) {
  *   { action: 'clarify', question, filters }
  *   { action: 'recommend', products, filters }
  */
-function decide({ query, products, vocabulary, previousFilters, excludeIds = [], maxRecommendations = 3 }) {
+function decide({ query, products, vocabulary, previousFilters, maxRecommendations = 3 }) {
   const filters = extractFilters(query, vocabulary, previousFilters);
-  const excludeSet = new Set(excludeIds);
-  const eligibleProducts = products.filter((p) => !excludeSet.has(p.id));
 
   const hasAnySignal = Boolean(filters.category || (filters.tags && filters.tags.length) || filters.price);
 
@@ -142,16 +113,14 @@ function decide({ query, products, vocabulary, previousFilters, excludeIds = [],
     return { action: 'clarify', question, filters };
   }
 
-  const matched = eligibleProducts
+  const matched = products
     .filter((p) => productMatchesFilters(p, filters))
     .map((p) => ({ product: p, score: scoreProduct(p, filters) }))
     .sort((a, b) => b.score - a.score);
 
   if (matched.length === 0) {
-    const stillMatchingButShown = products.some((p) => excludeSet.has(p.id) && productMatchesFilters(p, filters));
-    const question = stillMatchingButShown
-      ? "I've actually shown you everything I have that matches this — want to loosen the budget, style, or category so I can find more?"
-      : `I couldn't find anything matching that. Could you broaden your request${topCategories(vocabulary).length ? ` — maybe try one of: ${topCategories(vocabulary).join(', ')}` : ''}, or adjust the price range?`;
+    const cats = topCategories(vocabulary);
+    const question = `I couldn't find anything matching that. Could you broaden your request${cats.length ? ` — maybe try one of: ${cats.join(', ')}` : ''}, or adjust the price range?`;
     return { action: 'clarify', question, filters };
   }
 

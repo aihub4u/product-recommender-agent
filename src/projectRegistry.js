@@ -17,6 +17,7 @@ function rowToSkill(row) {
     authValueEnc: row.auth_value_enc || null,
     hasAuthValue: Boolean(row.auth_value_enc),
     params: (() => { try { return JSON.parse(row.params_json || '[]'); } catch (e) { return []; } })(),
+    headerParams: (() => { try { return JSON.parse(row.header_params_json || '[]'); } catch (e) { return []; } })(),
     bodyTemplate: row.body_template || '',
     enabled: row.enabled !== false,
   };
@@ -377,12 +378,13 @@ async function createSkill(slug, input) {
   const authValueEnc = input.authValue ? cryptoHelper.encrypt(input.authValue) : null;
   const { rows } = await db.query(
     `INSERT INTO project_skills
-       (project_id, name, description, method, url, headers_json, auth_type, auth_header_name, auth_value_enc, params_json, body_template, enabled)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+       (project_id, name, description, method, url, headers_json, auth_type, auth_header_name, auth_value_enc, params_json, header_params_json, body_template, enabled)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [
       entry.id, input.name, input.description, (input.method || 'GET').toUpperCase(), input.url,
       JSON.stringify(input.headers || {}), input.authType || 'none', input.authHeaderName || null,
-      authValueEnc, JSON.stringify(input.params || []), input.bodyTemplate || null, input.enabled !== false,
+      authValueEnc, JSON.stringify(input.params || []), JSON.stringify(input.headerParams || []),
+      input.bodyTemplate || null, input.enabled !== false,
     ]
   );
   const skill = rowToSkill(rows[0]);
@@ -412,6 +414,7 @@ async function updateSkill(slug, skillId, input) {
   if (input.authValue) set('auth_value_enc', cryptoHelper.encrypt(input.authValue));
   if (input.clearAuthValue) { fields.push(`auth_value_enc = NULL`); }
   if (input.params !== undefined) set('params_json', JSON.stringify(input.params || []));
+  if (input.headerParams !== undefined) set('header_params_json', JSON.stringify(input.headerParams || []));
   if (input.bodyTemplate !== undefined) set('body_template', input.bodyTemplate || null);
   if (input.enabled !== undefined) set('enabled', input.enabled);
   fields.push(`updated_at = now()`);
