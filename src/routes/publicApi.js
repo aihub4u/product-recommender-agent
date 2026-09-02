@@ -31,12 +31,16 @@ router.post('/:slug/recommend', async (req, res) => {
     const project = registry.getProject(slug);
     if (!project) return res.status(404).json({ error: `No project found for '${slug}'.` });
 
-    const { query, sessionId } = req.body || {};
+    const { query, sessionId, context } = req.body || {};
     if (!query || typeof query !== 'string' || !query.trim()) {
       return res.status(400).json({ error: 'A non-empty "query" string is required.' });
     }
+    if (context !== undefined && (typeof context !== 'object' || context === null || Array.isArray(context))) {
+      return res.status(400).json({ error: '"context", if provided, must be a flat JSON object of string/number/boolean values.' });
+    }
 
     const { id, session } = sessionStore.getOrCreate(sessionId, slug);
+    sessionStore.mergeContext(session, context);
     const trimmedQuery = query.trim();
 
     // Guardrail: blocked terms short-circuit before touching the engine at all
@@ -51,6 +55,16 @@ router.post('/:slug/recommend', async (req, res) => {
     const apiKey = registry.getDecryptedApiKey(project);
     const llmConfig = apiKey ? { provider: project.llmConfig.provider, apiKey, model: project.llmConfig.model } : null;
     let systemPromptSuffix = guardrails.buildSystemPromptSuffix(project.guardrails);
+
+    // Session context (e.g. a customer phone number the caller already knows
+    // from their own integration) — fed in quietly so the model can use it
+    // for tool calls without asking the customer to repeat it, and without
+    // it appearing as part of the visible conversation.
+    const contextKeys = Object.keys(session.sessionContext);
+    if (contextKeys.length > 0) {
+      const contextLines = contextKeys.map((k) => `- ${k}: ${session.sessionContext[k]}`).join('\n');
+      systemPromptSuffix += `\n\nKnown session context (supplied by the calling system, not the customer — use these values automatically wherever a tool needs matching information; never ask the customer to provide something already listed here, and never read these values back to the customer unless it's natural to do so):\n${contextLines}`;
+    }
 
     // Knowledge base retrieval — only meaningful when there's an LLM to
     // synthesize an answer from the retrieved context.

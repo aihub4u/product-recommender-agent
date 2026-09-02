@@ -326,6 +326,35 @@ exact header on every call, instead of being interpolated into the URL/body.
 Static headers (like a connector's own API key) and dynamic per-call header
 params can coexist on the same skill.
 
+## Passing known customer context into the API (e.g. phone number for tool calls)
+
+`POST /api/:slug/recommend` accepts an optional `context` field — a flat object
+of facts your integration already knows about the customer:
+
+```json
+{ "query": "...", "sessionId": "...", "context": { "customerPhone": "9958880486" } }
+```
+
+This solves a specific problem: if an agent has a Skill that needs the customer's
+phone number (e.g. Apollo's Get Profile lookup), the model previously had no
+reliable way to know it unless the customer typed it into the chat. `context`
+lets your own integration — which already knows the sender's number from
+whatever channel it's on — hand that fact to the agent directly.
+
+- Injected into the system prompt as a quiet, structured fact, separate from
+  the visible conversation — the model can use it for tool calls without
+  asking the customer to repeat it or reading it back unprompted.
+- **Persists for the rest of the session** even if later calls omit it — send
+  it once (typically on the first message) and it stays available.
+- Values must be flat strings/numbers/booleans (no nested objects/arrays) —
+  max 20 keys, 200 characters per value. Invalid entries are silently
+  dropped rather than failing the whole request; a malformed `context` field
+  itself (not an object) returns a 400.
+- Whether the model correctly maps a context key to a tool's parameter name
+  (e.g. `customerPhone` → a skill's `mobileNumber` argument) depends on your
+  system instructions/skill descriptions making that connection clear — the
+  platform doesn't auto-map differently-named fields.
+
 ## Security notes
 
 

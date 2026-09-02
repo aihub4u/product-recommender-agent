@@ -1176,6 +1176,17 @@
       '    "sessionId": "<sessionId from the previous response>"\n' +
       '  }\'';
 
+    const curlWithContext =
+      'curl -X POST ' + url + ' \\\n' +
+      '  -H "Content-Type: application/json" \\\n' +
+      '  -d \'{\n' +
+      '    "query": "' + sampleQuery + '",\n' +
+      '    "sessionId": null,\n' +
+      '    "context": {\n' +
+      '      "customerPhone": "9958880486"\n' +
+      '    }\n' +
+      '  }\'';
+
     const curlHealth = 'curl ' + healthUrl;
 
     let sampleResponses, responseFieldsRows;
@@ -1251,6 +1262,9 @@
       '<div class="card"><h3>cURL — follow-up (same conversation)</h3>' +
       '<div class="hint" style="margin-bottom:10px;">Pass the <code class="mono">sessionId</code> from the previous response to keep context across turns.</div>' +
       codeBlock('curl2', curlFollowUp) + '</div>' +
+      '<div class="card"><h3>cURL — with session context</h3>' +
+      '<div class="hint" style="margin-bottom:10px;">If your integration already knows facts about the customer (phone number, account ID, etc.), pass them in <code class="mono">context</code> — the agent can use these for tool calls without asking the customer to repeat them, and they persist for the rest of the session even if later calls omit this field.</div>' +
+      codeBlock('curl4', curlWithContext) + '</div>' +
 
       '<div class="card"><h3>Sample responses</h3>' +
       sampleResponses.map((r, i) => '<div class="deploy-label">' + r.label + '</div>' + codeBlock('resp' + i, r.json)).join('') +
@@ -1265,6 +1279,7 @@
       '<table class="usage-table"><thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Notes</th></tr></thead><tbody>' +
       '<tr><td class="mono">query</td><td class="mono">string</td><td>Yes</td><td style="font-family:inherit; color:var(--ink-soft);">The user\'s message.</td></tr>' +
       '<tr><td class="mono">sessionId</td><td class="mono">string | null</td><td>No</td><td style="font-family:inherit; color:var(--ink-soft);">Omit or pass null on the first message; pass the value returned from the previous response to continue that conversation.</td></tr>' +
+      '<tr><td class="mono">context</td><td class="mono">object</td><td>No</td><td style="font-family:inherit; color:var(--ink-soft);">Flat key/value facts your integration already knows (e.g. <code class="mono">{"customerPhone": "9958880486"}</code>) — fed to the agent quietly so it can use them (e.g. as tool call arguments) without asking the customer to repeat them. Persists for the session even if later calls omit it; string/number/boolean values only, max 20 keys, 200 chars per value.</td></tr>' +
       '</tbody></table></div>' +
 
       '<div class="card"><h3>cURL — health check</h3>' + codeBlock('curl3', curlHealth) +
