@@ -402,6 +402,7 @@
   let editingConnectorId = null;
   let editingToolConnectorId = null;
   let editingToolId = null;
+  let csFormParams = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -1073,8 +1074,45 @@
     });
   }
 
+  function renderCsParamRows() {
+    return csFormParams.map((p, idx) => (
+      '<div class="row-2" style="grid-template-columns: 1.2fr 0.8fr 1.5fr auto auto; align-items:end; margin-bottom:8px;" data-cs-param-row="' + idx + '">' +
+        '<div class="field" style="margin:0;"><label>Name</label><input class="cs-param-name" value="' + escapeHtml(p.name || '') + '" placeholder="plan" /></div>' +
+        '<div class="field" style="margin:0;"><label>Type</label><select class="cs-param-type"><option value="string"' + (p.type === 'string' ? ' selected' : '') + '>string</option><option value="number"' + (p.type === 'number' ? ' selected' : '') + '>number</option><option value="boolean"' + (p.type === 'boolean' ? ' selected' : '') + '>boolean</option></select></div>' +
+        '<div class="field" style="margin:0;"><label>Description</label><input class="cs-param-desc" value="' + escapeHtml(p.description || '') + '" placeholder="What this value captures" /></div>' +
+        '<div class="field" style="margin:0;"><label>Required</label><input type="checkbox" class="cs-param-required" ' + (p.required ? 'checked' : '') + ' style="width:18px; height:18px; margin-top:6px;" /></div>' +
+        '<button class="btn btn-ghost cs-param-remove-btn" data-idx="' + idx + '" style="margin-bottom:2px;" title="Remove">✕</button>' +
+      '</div>'
+    )).join('');
+  }
+
+  function bindCsParamRowEvents(container) {
+    container.querySelectorAll('[data-cs-param-row]').forEach((row) => {
+      const idx = Number(row.dataset.csParamRow);
+      row.querySelector('.cs-param-name').addEventListener('input', (e) => { csFormParams[idx].name = e.target.value; });
+      row.querySelector('.cs-param-type').addEventListener('change', (e) => { csFormParams[idx].type = e.target.value; });
+      row.querySelector('.cs-param-desc').addEventListener('input', (e) => { csFormParams[idx].description = e.target.value; });
+      row.querySelector('.cs-param-required').addEventListener('change', (e) => { csFormParams[idx].required = e.target.checked; });
+    });
+    container.querySelectorAll('.cs-param-remove-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        csFormParams.splice(Number(btn.dataset.idx), 1);
+        refreshCsParamsUI(container);
+      });
+    });
+  }
+
+  function refreshCsParamsUI(container) {
+    const wrap = container.querySelector('#csParamRowsWrap');
+    wrap.innerHTML = renderCsParamRows();
+    bindCsParamRowEvents(container);
+  }
+
   function renderGuardrailsTab(el, detail) {
     const g = detail.guardrails;
+    const cs = g.conversionSignal || { enabled: false, name: 'ready_for_handoff', description: '', params: [] };
+    csFormParams = JSON.parse(JSON.stringify(cs.params || []));
+
     el.innerHTML =
       '<div class="card"><h3>Behavior instructions</h3>' +
       '<div class="field"><label>Extra system instructions</label><textarea id="f_sysInstr" placeholder="Describe this agent\'s job, tone, and any hard rules.">' + escapeHtml(g.systemInstructions || '') + '</textarea>' +
@@ -1088,7 +1126,26 @@
           '<div class="field"><label>Max price</label><input id="f_maxPrice" type="number" value="' + (g.maxPrice ?? '') + '" placeholder="no maximum" /></div>' +
         '</div><div class="field"><label>Max recommendations per reply (1-5)</label><input id="f_maxRec" type="number" min="1" max="5" value="' + (g.maxRecommendations || 3) + '" /></div></div>'
         : '') +
+      '<div class="card"><h3>Conversion / handoff signal</h3>' +
+      '<div class="hint" style="margin-bottom:14px;">Lets the model flag, mid-conversation, that the customer is ready to move forward (e.g. enrol, buy, book). When it fires, the API response\'s <code class="mono">action</code> field becomes the name you set below instead of the usual reply/recommend/clarify — so an external system consuming this API can detect it and hand off to another workflow, while the model\'s natural closing reply still comes through in <code class="mono">message</code>.</div>' +
+      '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none;"><input type="checkbox" id="cs_enabled" ' + (cs.enabled ? 'checked' : '') + ' style="width:16px; height:16px;" /> Enable conversion signal</label></div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Signal name (becomes the "action" value)</label><input id="cs_name" value="' + escapeHtml(cs.name || 'ready_for_handoff') + '" placeholder="ready_for_handoff" /></div>' +
+      '</div>' +
+      '<div class="field"><label>Description (this is how the model decides when to call it — be specific about what counts as real intent)</label>' +
+      '<textarea id="cs_description" placeholder="Call this once the customer has clearly and explicitly agreed to enrol — not just interest or a passing question.">' + escapeHtml(cs.description || '') + '</textarea></div>' +
+      '<div class="field"><label>Captured details (optional — data the model should pass along when it signals)</label>' +
+      '<div id="csParamRowsWrap">' + renderCsParamRows() + '</div>' +
+      '<button class="btn btn-secondary" id="addCsParamBtn" type="button">+ Add captured field</button>' +
+      '</div>' +
+      '<div class="save-row" style="margin-top:10px;"><span class="save-msg" id="csMsg"></span></div></div>' +
       '<div class="save-row" style="margin-left:2px;"><button class="btn btn-primary" id="saveGuardrails">Save guardrails</button><span class="save-msg" id="guardMsg"></span></div>';
+
+    $('addCsParamBtn').addEventListener('click', () => {
+      csFormParams.push({ name: '', type: 'string', description: '', required: false });
+      refreshCsParamsUI(el);
+    });
+    bindCsParamRowEvents(el);
 
     $('saveGuardrails').addEventListener('click', async () => {
       try {
@@ -1101,6 +1158,12 @@
             maxPrice: detail.hasDataSource ? ($('f_maxPrice').value === '' ? null : Number($('f_maxPrice').value)) : null,
             maxRecommendations: detail.hasDataSource ? (Number($('f_maxRec').value) || 3) : 3,
             offTopicMessage: $('f_offTopic').value.trim(),
+            conversionSignal: {
+              enabled: $('cs_enabled').checked,
+              name: $('cs_name').value.trim() || 'ready_for_handoff',
+              description: $('cs_description').value.trim(),
+              params: csFormParams.filter((p) => p.name.trim()),
+            },
           },
         });
         $('guardMsg').textContent = 'Saved.';
@@ -1211,14 +1274,21 @@
           json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'blocked', message: "Sorry, I can only help with product recommendations for this store." }, null, 2),
         },
       ];
+      if (detail.guardrails.conversionSignal && detail.guardrails.conversionSignal.enabled) {
+        sampleResponses.push({
+          label: 'Response — conversion signal fired (' + detail.guardrails.conversionSignal.name + ')',
+          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: detail.guardrails.conversionSignal.name, products: [{ id: 'MYV-0042', name: 'Wine Hued Elegance Lehenga', category: 'Lehenga', price: 8999 }], engineUsed: 'llm', signalData: { note: 'fields you configured in Guardrails → Conversion signal' } }, null, 2),
+        });
+      }
       responseFieldsRows = [
-        ['action', 'string', '"clarify" | "recommend" | "blocked"'],
+        ['action', 'string', '"clarify" | "recommend" | "blocked"' + (detail.guardrails.conversionSignal && detail.guardrails.conversionSignal.enabled ? ' | "' + detail.guardrails.conversionSignal.name + '" (see Guardrails tab)' : '')],
         ['sessionId', 'string', 'Pass this back on the next call to continue the same conversation.'],
         ['question', 'string', 'Only present when action is "clarify".'],
         ['products', 'array', 'Only present when action is "recommend" — up to the agent\'s configured max, each with id/name/category/price/description.'],
         ['reasoning', 'string', 'Only present when the LLM engine produced a recommendation (omitted on the rule-based fallback).'],
         ['engineUsed', 'string', '"llm" or "rule" — which engine actually answered this turn.'],
         ['message', 'string', 'Only present when action is "blocked" — the configured guardrail reply.'],
+        ['signalData', 'object', 'Only present when action equals the configured conversion signal name — the fields you defined for it in the Guardrails tab, as filled in by the model.'],
       ];
     } else {
       sampleResponses = [
@@ -1231,11 +1301,18 @@
           json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'blocked', message: "I'll have our team reach out directly." }, null, 2),
         },
       ];
+      if (detail.guardrails.conversionSignal && detail.guardrails.conversionSignal.enabled) {
+        sampleResponses.push({
+          label: 'Response — conversion signal fired (' + detail.guardrails.conversionSignal.name + ')',
+          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: detail.guardrails.conversionSignal.name, message: "Great — let's get that set up for you, connecting you now.", engineUsed: 'llm', signalData: { note: 'fields you configured in Guardrails → Conversion signal' } }, null, 2),
+        });
+      }
       responseFieldsRows = [
-        ['action', 'string', '"reply" | "blocked"'],
+        ['action', 'string', '"reply" | "blocked"' + (detail.guardrails.conversionSignal && detail.guardrails.conversionSignal.enabled ? ' | "' + detail.guardrails.conversionSignal.name + '" (see Guardrails tab)' : '')],
         ['sessionId', 'string', 'Pass this back on the next call to continue the same conversation.'],
-        ['message', 'string', "The agent's reply text (for \"reply\"), or the configured guardrail message (for \"blocked\")."],
+        ['message', 'string', "The agent's reply text (for \"reply\"), the configured guardrail message (for \"blocked\"), or the model's natural closing reply if a conversion signal fired."],
         ['engineUsed', 'string', '"llm", or "none" if no LLM key is configured yet for this agent.'],
+        ['signalData', 'object', 'Only present when action equals the configured conversion signal name — the fields you defined for it in the Guardrails tab, as filled in by the model.'],
       ];
     }
 

@@ -22,7 +22,7 @@ function buildUserMessage(query, history) {
   return conversation ? `Conversation so far:\n${conversation}\n\nLatest user message: ${query}` : query;
 }
 
-async function decide({ query, history, llmConfig, agentType, systemPromptSuffix = '', skills = [] }) {
+async function decide({ query, history, llmConfig, agentType, systemPromptSuffix = '', skills = [], conversionSignal = null }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('Chat engine called without a valid provider/apiKey — this should not happen.');
   }
@@ -30,12 +30,12 @@ async function decide({ query, history, llmConfig, agentType, systemPromptSuffix
   const systemPrompt = buildSystemPrompt(agentType, systemPromptSuffix);
   const userMessage = buildUserMessage(query, history);
 
-  const { rawText, usage } = await runWithTools({
+  const { rawText, usage, signal } = await runWithTools({
     provider: llmConfig.provider, apiKey: llmConfig.apiKey, model: llmConfig.model,
-    systemPrompt, userMessage, skills, jsonMode: false,
+    systemPrompt, userMessage, skills, jsonMode: false, conversionSignal,
   });
 
-  return { action: 'reply', message: rawText.trim(), usage };
+  return { action: 'reply', message: rawText.trim(), usage, signal };
 }
 
 module.exports = { decide };

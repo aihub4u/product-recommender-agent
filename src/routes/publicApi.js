@@ -100,12 +100,17 @@ router.post('/:slug/recommend', async (req, res) => {
         systemPromptSuffix,
         hasDataSource: false,
         skills: project.skills,
+        conversionSignal: project.guardrails.conversionSignal,
       });
 
       logIfLlm(project, result);
       session.history.push({ role: 'assistant', content: result.message });
 
-      return res.json({ sessionId: id, action: 'reply', message: result.message, engineUsed: result.engineUsed });
+      const outgoingAction = result.signal ? result.signal.name : 'reply';
+      return res.json({
+        sessionId: id, action: outgoingAction, message: result.message, engineUsed: result.engineUsed,
+        ...(result.signal ? { signalData: result.signal.data } : {}),
+      });
     }
 
     // ---- Catalog-based agent (product recommendation) ----
@@ -130,14 +135,17 @@ router.post('/:slug/recommend', async (req, res) => {
       systemPromptSuffix,
       hasDataSource: true,
       skills: project.skills,
+      conversionSignal: project.guardrails.conversionSignal,
     });
 
     session.filters = result.filters || session.filters;
     logIfLlm(project, result);
+    const signalFields = result.signal ? { signalData: result.signal.data } : {};
 
     if (result.action === 'clarify') {
       session.history.push({ role: 'assistant', content: result.question });
-      return res.json({ sessionId: id, action: 'clarify', question: result.question, engineUsed: result.engineUsed });
+      const outgoingAction = result.signal ? result.signal.name : 'clarify';
+      return res.json({ sessionId: id, action: outgoingAction, question: result.question, engineUsed: result.engineUsed, ...signalFields });
     }
 
     // Guardrail: hard price cap applied on top of whatever the engine picked.
@@ -153,12 +161,14 @@ router.post('/:slug/recommend', async (req, res) => {
       content: `Recommended: ${cappedProducts.map((p) => p.name || p.id).join(', ')}`,
     });
 
+    const outgoingAction = result.signal ? result.signal.name : 'recommend';
     return res.json({
       sessionId: id,
-      action: 'recommend',
+      action: outgoingAction,
       products: cappedProducts.map(formatProduct),
       engineUsed: result.engineUsed,
       ...(result.reasoning ? { reasoning: result.reasoning } : {}),
+      ...signalFields,
     });
   } catch (err) {
     console.error('[publicApi] recommend error:', err);

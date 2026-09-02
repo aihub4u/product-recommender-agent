@@ -161,7 +161,7 @@ router.put('/projects/:slug/llm', async (req, res) => {
 // ---- Guardrails ----
 router.put('/projects/:slug/guardrails', async (req, res) => {
   try {
-    const { systemInstructions, blockedTerms, minPrice, maxPrice, maxRecommendations, offTopicMessage } = req.body || {};
+    const { systemInstructions, blockedTerms, minPrice, maxPrice, maxRecommendations, offTopicMessage, conversionSignal } = req.body || {};
     const parsedTerms = Array.isArray(blockedTerms)
       ? blockedTerms
       : String(blockedTerms || '').split(',').map((t) => t.trim()).filter(Boolean);
@@ -173,6 +173,7 @@ router.put('/projects/:slug/guardrails', async (req, res) => {
       maxPrice: maxPrice === '' ? null : maxPrice,
       maxRecommendations,
       offTopicMessage,
+      conversionSignal,
     });
     res.json(updated);
   } catch (err) {

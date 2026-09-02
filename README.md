@@ -326,6 +326,47 @@ exact header on every call, instead of being interpolated into the URL/body.
 Static headers (like a connector's own API key) and dynamic per-call header
 params can coexist on the same skill.
 
+## Conversion / handoff signal — flagging "ready to convert" in the API response
+
+Every agent's **Guardrails** tab has a **Conversion / handoff signal** section. This
+solves a specific integration problem: if you're calling this API from an external
+system (a WhatsApp gateway, a CRM, a workflow engine), you often need to know the
+exact moment a customer is ready to move forward — enrol, buy, book — so control can
+hand off to a different workflow (an enrolment flow, a checkout, a booking system).
+
+**How it works**: this is built on the same tool-calling mechanism as Skills, but the
+"tool" here makes no HTTP call — it's purely a signal the model can raise. Enable it,
+give it a name (this becomes the `action` value in the API response — must not collide
+with the reserved names `reply`, `clarify`, `recommend`, `blocked`), and write a
+description that tells the model exactly what counts as real intent (be specific — this
+is the only signal the model has for *when* to fire it, same principle as a Skill's
+description). Optionally define fields you want captured when it fires (e.g. which plan,
+what budget) — these come back in the response's `signalData`.
+
+**What the API response looks like when it fires**:
+```json
+{
+  "sessionId": "...",
+  "action": "ready_for_handoff",
+  "message": "Great — let's get that set up for you, connecting you now.",
+  "engineUsed": "llm",
+  "signalData": { "plan": "family" }
+}
+```
+The model is still allowed to produce its natural closing reply in the same turn — you
+get both the distinctive `action` value to branch your external logic on, and a real
+message to actually show the customer, not just a bare flag.
+
+**Works for both agent types**: for catalog-based agents, the signal can fire alongside
+a real recommendation (the customer says "yes, I'll take that one" — you get the
+overridden `action` *and* the `products` array in the same response). For generic
+agents, it fires alongside the model's normal conversational reply.
+
+**One thing this platform doesn't do for you**: connecting a context field (like a
+customer phone number, see the `context` field above) to what the signal should capture
+is on you — write it into the signal's description or your system instructions, the
+same way tool parameter mapping works.
+
 ## Passing known customer context into the API (e.g. phone number for tool calls)
 
 `POST /api/:slug/recommend` accepts an optional `context` field — a flat object

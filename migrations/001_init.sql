@@ -42,8 +42,18 @@ CREATE TABLE IF NOT EXISTS project_guardrails (
   max_price NUMERIC,
   max_recommendations INTEGER DEFAULT 3,
   off_topic_message TEXT DEFAULT 'Sorry, I can only help with product recommendations for this store.',
+  conversion_signal_enabled BOOLEAN DEFAULT false,
+  conversion_signal_name TEXT DEFAULT 'ready_for_handoff',
+  conversion_signal_description TEXT DEFAULT '',
+  conversion_signal_params_json TEXT DEFAULT '[]',
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Safe to re-run against an existing table from an earlier version.
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_enabled BOOLEAN DEFAULT false;
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_name TEXT DEFAULT 'ready_for_handoff';
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_description TEXT DEFAULT '';
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_params_json TEXT DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS usage_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -24,7 +24,7 @@ function condenseProduct(p) {
   };
 }
 
-function buildSystemPrompt(maxRecommendations, systemPromptSuffix) {
+function buildSystemPrompt(maxRecommendations, systemPromptSuffix, conversionSignal) {
   let prompt = `You are a warm, attentive shopping assistant — think of a genuinely helpful in-store sales associate, not a form to fill out. You are given:
 - A conversation history with the user
 - A candidate product catalog (subset of a larger store, already loosely relevant)
@@ -45,6 +45,10 @@ Rules:
   {"action": "clarify", "question": "..."}
   {"action": "recommend", "productIds": ["id1", "id2"], "reasoning": "one short sentence"}`;
 
+  if (conversionSignal && conversionSignal.enabled && conversionSignal.name) {
+    prompt += `\n\nIf, at any point, you call the "${conversionSignal.name}" tool, you must still produce your final reply in the normal raw JSON shape above (clarify or recommend) afterward — the tool call is tracked separately and does not change your response format.`;
+  }
+
   if (systemPromptSuffix) {
     prompt += `\n\n${systemPromptSuffix}`;
   }
@@ -62,23 +66,23 @@ function buildUserMessage(query, history, candidates) {
   ].join('\n');
 }
 
-async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [] }) {
+async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [], conversionSignal = null }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
   }
 
   const candidates = buildCandidateList(query, products, vocabulary, previousFilters).map(condenseProduct);
-  const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix);
+  const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix, conversionSignal);
   const userMessage = buildUserMessage(query, history, candidates);
 
-  const { rawText, usage } = await runWithTools({
+  const { rawText, usage, signal } = await runWithTools({
     provider: llmConfig.provider, apiKey: llmConfig.apiKey, model: llmConfig.model,
-    systemPrompt, userMessage, skills, jsonMode: true,
+    systemPrompt, userMessage, skills, jsonMode: true, conversionSignal,
   });
   const parsed = parseModelJson(rawText);
 
   if (parsed.action === 'clarify') {
-    return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage };
+    return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage, signal };
   }
 
   if (parsed.action === 'recommend') {
@@ -92,7 +96,7 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
       throw new Error('LLM recommended ids not present in catalog');
     }
 
-    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning, usage };
+    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning, usage, signal };
   }
 
   throw new Error(`Unrecognized LLM action: ${parsed.action}`);

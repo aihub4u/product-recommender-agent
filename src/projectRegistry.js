@@ -81,6 +81,8 @@ function rowToLlmConfig(row) {
   };
 }
 
+const RESERVED_ACTION_NAMES = new Set(['reply', 'clarify', 'recommend', 'blocked']);
+
 function rowToGuardrails(row) {
   if (!row) {
     return {
@@ -90,6 +92,7 @@ function rowToGuardrails(row) {
       maxPrice: null,
       maxRecommendations: globalConfig.defaultMaxRecommendations,
       offTopicMessage: 'Sorry, I can only help with product recommendations for this store.',
+      conversionSignal: { enabled: false, name: 'ready_for_handoff', description: '', params: [] },
     };
   }
   return {
@@ -99,6 +102,12 @@ function rowToGuardrails(row) {
     maxPrice: row.max_price !== null ? Number(row.max_price) : null,
     maxRecommendations: row.max_recommendations || globalConfig.defaultMaxRecommendations,
     offTopicMessage: row.off_topic_message || 'Sorry, I can only help with product recommendations for this store.',
+    conversionSignal: {
+      enabled: row.conversion_signal_enabled === true,
+      name: row.conversion_signal_name || 'ready_for_handoff',
+      description: row.conversion_signal_description || '',
+      params: (() => { try { return JSON.parse(row.conversion_signal_params_json || '[]'); } catch (e) { return []; } })(),
+    },
   };
 }
 
@@ -244,9 +253,18 @@ async function updateLlmConfig(slug, { provider, apiKey, model, clearApiKey, emb
   return entry.llmConfig;
 }
 
-async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPrice, maxPrice, maxRecommendations, offTopicMessage }) {
+async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPrice, maxPrice, maxRecommendations, offTopicMessage, conversionSignal }) {
   const entry = getProject(slug);
   if (!entry) throw new Error('Project not found');
+
+  const cs = conversionSignal || {};
+  const csName = (cs.name || 'ready_for_handoff').trim();
+  if (cs.enabled && RESERVED_ACTION_NAMES.has(csName)) {
+    throw new Error(`"${csName}" is a reserved action name (reply, clarify, recommend, blocked) — choose a different name for the conversion signal.`);
+  }
+  if (cs.enabled && !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(csName)) {
+    throw new Error('Conversion signal name must be a short identifier (letters, numbers, underscore, starting with a letter) — this becomes the "action" value in API responses.');
+  }
 
   await db.query(
     `UPDATE project_guardrails SET
@@ -256,8 +274,12 @@ async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPri
        max_price = $4,
        max_recommendations = $5,
        off_topic_message = $6,
+       conversion_signal_enabled = $7,
+       conversion_signal_name = $8,
+       conversion_signal_description = $9,
+       conversion_signal_params_json = $10,
        updated_at = now()
-     WHERE project_id = $7`,
+     WHERE project_id = $11`,
     [
       systemInstructions || '',
       blockedTerms || [],
@@ -265,6 +287,10 @@ async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPri
       maxPrice === '' || maxPrice === undefined ? null : maxPrice,
       maxRecommendations || globalConfig.defaultMaxRecommendations,
       offTopicMessage || 'Sorry, I can only help with product recommendations for this store.',
+      Boolean(cs.enabled),
+      csName,
+      cs.description || '',
+      JSON.stringify(cs.params || []),
       entry.id,
     ]
   );
