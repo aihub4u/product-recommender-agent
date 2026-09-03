@@ -46,6 +46,10 @@ CREATE TABLE IF NOT EXISTS project_guardrails (
   conversion_signal_name TEXT DEFAULT 'ready_for_handoff',
   conversion_signal_description TEXT DEFAULT '',
   conversion_signal_params_json TEXT DEFAULT '[]',
+  quick_replies_enabled BOOLEAN DEFAULT false,
+  quick_replies_final_label TEXT DEFAULT 'Enroll Now',
+  quick_replies_max_chars INTEGER DEFAULT 20,
+  quick_replies_options_pool_json TEXT DEFAULT '[]',
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -54,6 +58,10 @@ ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_enable
 ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_name TEXT DEFAULT 'ready_for_handoff';
 ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_description TEXT DEFAULT '';
 ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS conversion_signal_params_json TEXT DEFAULT '[]';
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS quick_replies_enabled BOOLEAN DEFAULT false;
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS quick_replies_final_label TEXT DEFAULT 'Enroll Now';
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS quick_replies_max_chars INTEGER DEFAULT 20;
+ALTER TABLE project_guardrails ADD COLUMN IF NOT EXISTS quick_replies_options_pool_json TEXT DEFAULT '[]';
 
 CREATE TABLE IF NOT EXISTS usage_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

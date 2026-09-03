@@ -403,6 +403,7 @@
   let editingToolConnectorId = null;
   let editingToolId = null;
   let csFormParams = [];
+  let qrPoolItems = [];
 
   const $ = (id) => document.getElementById(id);
 
@@ -1108,9 +1109,49 @@
     bindCsParamRowEvents(container);
   }
 
+  function renderQrPoolRows(maxChars) {
+    return qrPoolItems.map((opt, idx) => {
+      const len = String(opt || '').length;
+      const over = len > maxChars;
+      return '<div style="display:flex; gap:8px; align-items:center; margin-bottom:6px;" data-qr-pool-row="' + idx + '">' +
+        '<input class="qr-pool-input" value="' + escapeHtml(opt) + '" placeholder="e.g. What is covered?" style="flex:1;" />' +
+        '<span class="mono qr-pool-count" style="font-size:11px; color:' + (over ? 'var(--red)' : 'var(--ink-faint)') + '; min-width:44px; text-align:right;">' + len + '/' + maxChars + '</span>' +
+        '<button class="btn btn-ghost qr-pool-remove-btn" data-idx="' + idx + '" title="Remove">✕</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function bindQrPoolRowEvents(container, maxChars) {
+    container.querySelectorAll('[data-qr-pool-row]').forEach((row) => {
+      const idx = Number(row.dataset.qrPoolRow);
+      const input = row.querySelector('.qr-pool-input');
+      const countEl = row.querySelector('.qr-pool-count');
+      input.addEventListener('input', (e) => {
+        qrPoolItems[idx] = e.target.value;
+        const len = e.target.value.length;
+        countEl.textContent = len + '/' + maxChars;
+        countEl.style.color = len > maxChars ? 'var(--red)' : 'var(--ink-faint)';
+      });
+    });
+    container.querySelectorAll('.qr-pool-remove-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        qrPoolItems.splice(Number(btn.dataset.idx), 1);
+        refreshQrPoolUI(container, Number($('qr_maxChars').value) || 20);
+      });
+    });
+  }
+
+  function refreshQrPoolUI(container, maxChars) {
+    const wrap = container.querySelector('#qrPoolRowsWrap');
+    wrap.innerHTML = renderQrPoolRows(maxChars);
+    bindQrPoolRowEvents(container, maxChars);
+  }
+
   function renderGuardrailsTab(el, detail) {
     const g = detail.guardrails;
     const cs = g.conversionSignal || { enabled: false, name: 'ready_for_handoff', description: '', params: [] };
+    const qr = g.quickReplies || { enabled: false, finalLabel: 'Enroll Now', maxChars: 20, optionsPool: [] };
+    qrPoolItems = JSON.parse(JSON.stringify(qr.optionsPool || []));
     csFormParams = JSON.parse(JSON.stringify(cs.params || []));
 
     el.innerHTML =
@@ -1139,6 +1180,19 @@
       '<button class="btn btn-secondary" id="addCsParamBtn" type="button">+ Add captured field</button>' +
       '</div>' +
       '<div class="save-row" style="margin-top:10px;"><span class="save-msg" id="csMsg"></span></div></div>' +
+      '<div class="card"><h3>WhatsApp quick replies</h3>' +
+      '<div class="hint" style="margin-bottom:14px;">When enabled, the model no longer lists follow-up options as text in its reply — instead, every response includes a <code class="mono">quickReplies</code> array with exactly 3 short options, ready to render as native WhatsApp quick-reply buttons. The first two are chosen by the model based on the conversation; the third is always the exact text you set below, guaranteed by this platform — never generated or skipped by the model.</div>' +
+      '<div class="field"><label style="display:flex; align-items:center; gap:8px; text-transform:none;"><input type="checkbox" id="qr_enabled" ' + (qr.enabled ? 'checked' : '') + ' style="width:16px; height:16px;" /> Enable quick replies</label></div>' +
+      '<div class="row-2">' +
+        '<div class="field"><label>Final option (always 3rd, always exact)</label><input id="qr_finalLabel" value="' + escapeHtml(qr.finalLabel || 'Enroll Now') + '" placeholder="Enroll Now" /></div>' +
+        '<div class="field"><label>Max characters per option</label><input id="qr_maxChars" type="number" min="5" max="60" value="' + (qr.maxChars || 20) + '" /></div>' +
+      '</div>' +
+      '<div class="field"><label>Approved options pool (recommended)</label>' +
+      '<div class="hint" style="margin-bottom:10px;">If you add options here, the model MUST pick its 2 dynamic options from this exact list — never generate its own text. This guarantees every option is pre-vetted: short, complete, and makes sense, since you wrote it yourself. Leave empty to let the model generate free text instead (less predictable — falls back to automatic length-fitting).</div>' +
+      '<div id="qrPoolRowsWrap">' + renderQrPoolRows(qr.maxChars || 20) + '</div>' +
+      '<button class="btn btn-secondary" id="addQrPoolBtn" type="button">+ Add option</button>' +
+      '</div>' +
+      '<div class="save-row" style="margin-top:10px;"><span class="save-msg" id="qrMsg"></span></div></div>' +
       '<div class="save-row" style="margin-left:2px;"><button class="btn btn-primary" id="saveGuardrails">Save guardrails</button><span class="save-msg" id="guardMsg"></span></div>';
 
     $('addCsParamBtn').addEventListener('click', () => {
@@ -1146,6 +1200,15 @@
       refreshCsParamsUI(el);
     });
     bindCsParamRowEvents(el);
+
+    $('addQrPoolBtn').addEventListener('click', () => {
+      qrPoolItems.push('');
+      refreshQrPoolUI(el, Number($('qr_maxChars').value) || 20);
+    });
+    bindQrPoolRowEvents(el, Number($('qr_maxChars').value) || 20);
+    $('qr_maxChars').addEventListener('input', () => {
+      refreshQrPoolUI(el, Number($('qr_maxChars').value) || 20);
+    });
 
     $('saveGuardrails').addEventListener('click', async () => {
       try {
@@ -1163,6 +1226,12 @@
               name: $('cs_name').value.trim() || 'ready_for_handoff',
               description: $('cs_description').value.trim(),
               params: csFormParams.filter((p) => p.name.trim()),
+            },
+            quickReplies: {
+              enabled: $('qr_enabled').checked,
+              finalLabel: $('qr_finalLabel').value.trim() || 'Enroll Now',
+              maxChars: Number($('qr_maxChars').value) || 20,
+              optionsPool: qrPoolItems.map((o) => o.trim()).filter(Boolean),
             },
           },
         });
@@ -1267,6 +1336,7 @@
             products: [{ id: 'MYV-0042', name: 'Wine Hued Elegance Lehenga', category: 'Lehenga', price: 8999, description: '...' }],
             engineUsed: 'llm',
             reasoning: 'Fits the wedding occasion and budget mentioned.',
+            ...(detail.guardrails.quickReplies && detail.guardrails.quickReplies.enabled ? { quickReplies: ['Under 5000?', 'Something festive?', detail.guardrails.quickReplies.finalLabel] } : {}),
           }, null, 2),
         },
         {
@@ -1289,12 +1359,16 @@
         ['engineUsed', 'string', '"llm" or "rule" — which engine actually answered this turn.'],
         ['message', 'string', 'Only present when action is "blocked" — the configured guardrail reply.'],
         ['signalData', 'object', 'Only present when action equals the configured conversion signal name — the fields you defined for it in the Guardrails tab, as filled in by the model.'],
+        ['quickReplies', 'array', 'Only present when quick replies are enabled in Guardrails — always exactly 3 short strings, the last always the exact configured final option.'],
       ];
     } else {
       sampleResponses = [
         {
           label: 'Response — reply',
-          json: JSON.stringify({ sessionId: '3fa2c1d0-...', action: 'reply', message: "We're open Mon-Sat, 9:30 AM to 6:30 PM IST.", engineUsed: 'llm' }, null, 2),
+          json: JSON.stringify({
+            sessionId: '3fa2c1d0-...', action: 'reply', message: "We're open Mon-Sat, 9:30 AM to 6:30 PM IST.", engineUsed: 'llm',
+            ...(detail.guardrails.quickReplies && detail.guardrails.quickReplies.enabled ? { quickReplies: ['Check pricing', 'Ask a question', detail.guardrails.quickReplies.finalLabel] } : {}),
+          }, null, 2),
         },
         {
           label: 'Response — blocked by guardrail',
@@ -1313,6 +1387,7 @@
         ['message', 'string', "The agent's reply text (for \"reply\"), the configured guardrail message (for \"blocked\"), or the model's natural closing reply if a conversion signal fired."],
         ['engineUsed', 'string', '"llm", or "none" if no LLM key is configured yet for this agent.'],
         ['signalData', 'object', 'Only present when action equals the configured conversion signal name — the fields you defined for it in the Guardrails tab, as filled in by the model.'],
+        ['quickReplies', 'array', 'Only present when quick replies are enabled in Guardrails — always exactly 3 short strings, the last always the exact configured final option.'],
       ];
     }
 

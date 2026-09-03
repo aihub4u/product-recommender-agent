@@ -5,6 +5,7 @@ const engine = require('../engines');
 const guardrails = require('../guardrails');
 const usageStore = require('../usageStore');
 const knowledgeStore = require('../knowledgeStore');
+const { buildQuickReplies } = require('../quickReplies');
 
 const router = express.Router();
 
@@ -101,15 +102,24 @@ router.post('/:slug/recommend', async (req, res) => {
         hasDataSource: false,
         skills: project.skills,
         conversionSignal: project.guardrails.conversionSignal,
+        quickReplies: project.guardrails.quickReplies,
       });
 
       logIfLlm(project, result);
       session.history.push({ role: 'assistant', content: result.message });
 
       const outgoingAction = result.signal ? result.signal.name : 'reply';
+      // Quick replies only make sense on a normal reply turn — a
+      // conversion-signal turn is already handing off to another workflow.
+      const qr = project.guardrails.quickReplies;
+      const quickRepliesField = (qr && qr.enabled && !result.signal)
+        ? { quickReplies: buildQuickReplies(result.dynamicOptions, qr.finalLabel, qr.maxChars, qr.optionsPool) }
+        : {};
+
       return res.json({
         sessionId: id, action: outgoingAction, message: result.message, engineUsed: result.engineUsed,
         ...(result.signal ? { signalData: result.signal.data } : {}),
+        ...quickRepliesField,
       });
     }
 
@@ -136,16 +146,23 @@ router.post('/:slug/recommend', async (req, res) => {
       hasDataSource: true,
       skills: project.skills,
       conversionSignal: project.guardrails.conversionSignal,
+      quickReplies: project.guardrails.quickReplies,
     });
 
     session.filters = result.filters || session.filters;
     logIfLlm(project, result);
     const signalFields = result.signal ? { signalData: result.signal.data } : {};
+    const qr = project.guardrails.quickReplies;
+    // Quick replies only make sense on a normal turn — a conversion-signal
+    // turn is already handing off to another workflow.
+    const quickRepliesField = (qr && qr.enabled && !result.signal)
+      ? { quickReplies: buildQuickReplies(result.dynamicOptions, qr.finalLabel, qr.maxChars, qr.optionsPool) }
+      : {};
 
     if (result.action === 'clarify') {
       session.history.push({ role: 'assistant', content: result.question });
       const outgoingAction = result.signal ? result.signal.name : 'clarify';
-      return res.json({ sessionId: id, action: outgoingAction, question: result.question, engineUsed: result.engineUsed, ...signalFields });
+      return res.json({ sessionId: id, action: outgoingAction, question: result.question, engineUsed: result.engineUsed, ...signalFields, ...quickRepliesField });
     }
 
     // Guardrail: hard price cap applied on top of whatever the engine picked.
@@ -169,6 +186,7 @@ router.post('/:slug/recommend', async (req, res) => {
       engineUsed: result.engineUsed,
       ...(result.reasoning ? { reasoning: result.reasoning } : {}),
       ...signalFields,
+      ...quickRepliesField,
     });
   } catch (err) {
     console.error('[publicApi] recommend error:', err);

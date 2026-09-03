@@ -93,6 +93,7 @@ function rowToGuardrails(row) {
       maxRecommendations: globalConfig.defaultMaxRecommendations,
       offTopicMessage: 'Sorry, I can only help with product recommendations for this store.',
       conversionSignal: { enabled: false, name: 'ready_for_handoff', description: '', params: [] },
+      quickReplies: { enabled: false, finalLabel: 'Enroll Now', maxChars: 20, optionsPool: [] },
     };
   }
   return {
@@ -107,6 +108,12 @@ function rowToGuardrails(row) {
       name: row.conversion_signal_name || 'ready_for_handoff',
       description: row.conversion_signal_description || '',
       params: (() => { try { return JSON.parse(row.conversion_signal_params_json || '[]'); } catch (e) { return []; } })(),
+    },
+    quickReplies: {
+      enabled: row.quick_replies_enabled === true,
+      finalLabel: row.quick_replies_final_label || 'Enroll Now',
+      maxChars: row.quick_replies_max_chars || 20,
+      optionsPool: (() => { try { return JSON.parse(row.quick_replies_options_pool_json || '[]'); } catch (e) { return []; } })(),
     },
   };
 }
@@ -253,7 +260,7 @@ async function updateLlmConfig(slug, { provider, apiKey, model, clearApiKey, emb
   return entry.llmConfig;
 }
 
-async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPrice, maxPrice, maxRecommendations, offTopicMessage, conversionSignal }) {
+async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPrice, maxPrice, maxRecommendations, offTopicMessage, conversionSignal, quickReplies }) {
   const entry = getProject(slug);
   if (!entry) throw new Error('Project not found');
 
@@ -264,6 +271,19 @@ async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPri
   }
   if (cs.enabled && !/^[a-zA-Z_][a-zA-Z0-9_]{0,63}$/.test(csName)) {
     throw new Error('Conversion signal name must be a short identifier (letters, numbers, underscore, starting with a letter) — this becomes the "action" value in API responses.');
+  }
+
+  const qr = quickReplies || {};
+  const qrMaxChars = Number(qr.maxChars) > 0 ? Math.round(Number(qr.maxChars)) : 20;
+  // Each pool entry is operator-written, so validate at save time rather than
+  // at request time — an entry that's too long gets rejected here with a
+  // clear reason, not silently truncated later during a live conversation.
+  const qrPool = (Array.isArray(qr.optionsPool) ? qr.optionsPool : [])
+    .map((o) => String(o || '').trim())
+    .filter(Boolean);
+  const tooLong = qrPool.find((o) => o.length > qrMaxChars);
+  if (tooLong) {
+    throw new Error(`Quick-reply option "${tooLong}" is ${tooLong.length} characters, over the ${qrMaxChars}-character limit — shorten it or raise the limit.`);
   }
 
   await db.query(
@@ -278,8 +298,12 @@ async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPri
        conversion_signal_name = $8,
        conversion_signal_description = $9,
        conversion_signal_params_json = $10,
+       quick_replies_enabled = $11,
+       quick_replies_final_label = $12,
+       quick_replies_max_chars = $13,
+       quick_replies_options_pool_json = $14,
        updated_at = now()
-     WHERE project_id = $11`,
+     WHERE project_id = $15`,
     [
       systemInstructions || '',
       blockedTerms || [],
@@ -291,6 +315,10 @@ async function updateGuardrails(slug, { systemInstructions, blockedTerms, minPri
       csName,
       cs.description || '',
       JSON.stringify(cs.params || []),
+      Boolean(qr.enabled),
+      (qr.finalLabel || 'Enroll Now').trim(),
+      qrMaxChars,
+      JSON.stringify(qrPool),
       entry.id,
     ]
   );

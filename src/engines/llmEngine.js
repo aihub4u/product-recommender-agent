@@ -24,7 +24,7 @@ function condenseProduct(p) {
   };
 }
 
-function buildSystemPrompt(maxRecommendations, systemPromptSuffix, conversionSignal) {
+function buildSystemPrompt(maxRecommendations, systemPromptSuffix, conversionSignal, quickReplies) {
   let prompt = `You are a warm, attentive shopping assistant — think of a genuinely helpful in-store sales associate, not a form to fill out. You are given:
 - A conversation history with the user
 - A candidate product catalog (subset of a larger store, already loosely relevant)
@@ -49,6 +49,24 @@ Rules:
     prompt += `\n\nIf, at any point, you call the "${conversionSignal.name}" tool, you must still produce your final reply in the normal raw JSON shape above (clarify or recommend) afterward — the tool call is tracked separately and does not change your response format.`;
   }
 
+  if (quickReplies && quickReplies.enabled) {
+    const pool = (quickReplies.optionsPool || []).filter((o) => String(o || '').trim());
+    const hasPool = pool.length > 0;
+
+    prompt += `\n\nAlso include an "options" field in your JSON response (both shapes above): an array of exactly 2 WhatsApp quick-reply BUTTON LABELS shown to the user.`;
+
+    if (hasPool) {
+      prompt += ` You MUST choose exactly 2 items from this approved list — copy the text EXACTLY as written, do not paraphrase, shorten, or invent new options:
+${pool.map((o) => `- "${o}"`).join('\n')}
+
+Pick the 2 most relevant to what was just discussed, and different from anything already offered earlier in the conversation. Example full response: {"action": "clarify", "question": "...", "options": ["${pool[0]}", "${pool[1] || pool[0]}"]}`;
+    } else {
+      prompt += ` Each must be a COMPLETE short phrase of ${quickReplies.maxChars || 20} characters or fewer (including spaces/punctuation) that makes sense standing alone as a button — not a sentence. If your first idea for a phrase doesn't fit, express the same idea more concisely rather than writing a longer phrase and letting it be cut off — a truncated fragment is worse than a shorter idea. They must be genuinely relevant to what was just discussed and different from anything already offered earlier in the conversation. Good examples: "Under 5000?", "Something festive?", "Compare styles". Bad (too long / reads like a cut-off sentence): "What's your budget for this occasion". Example full response: {"action": "clarify", "question": "...", "options": ["Under 5000?", "Something festive?"]}`;
+    }
+
+    prompt += ` Do NOT include a call-to-action / "buy now" style option yourself — that is added separately, automatically.`;
+  }
+
   if (systemPromptSuffix) {
     prompt += `\n\n${systemPromptSuffix}`;
   }
@@ -66,13 +84,13 @@ function buildUserMessage(query, history, candidates) {
   ].join('\n');
 }
 
-async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [], conversionSignal = null }) {
+async function decide({ query, products, vocabulary, previousFilters, history, llmConfig, maxRecommendations = 3, systemPromptSuffix = '', skills = [], conversionSignal = null, quickReplies = null }) {
   if (!llmConfig || !llmConfig.provider || llmConfig.provider === 'none' || !llmConfig.apiKey) {
     throw new Error('LLM engine called without a valid provider/apiKey — this should not happen.');
   }
 
   const candidates = buildCandidateList(query, products, vocabulary, previousFilters).map(condenseProduct);
-  const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix, conversionSignal);
+  const systemPrompt = buildSystemPrompt(maxRecommendations, systemPromptSuffix, conversionSignal, quickReplies);
   const userMessage = buildUserMessage(query, history, candidates);
 
   const { rawText, usage, signal } = await runWithTools({
@@ -82,7 +100,7 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
   const parsed = parseModelJson(rawText);
 
   if (parsed.action === 'clarify') {
-    return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage, signal };
+    return { action: 'clarify', question: parsed.question, filters: previousFilters || {}, usage, signal, dynamicOptions: parsed.options };
   }
 
   if (parsed.action === 'recommend') {
@@ -96,7 +114,7 @@ async function decide({ query, products, vocabulary, previousFilters, history, l
       throw new Error('LLM recommended ids not present in catalog');
     }
 
-    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning, usage, signal };
+    return { action: 'recommend', products: resolved, filters: previousFilters || {}, reasoning: parsed.reasoning, usage, signal, dynamicOptions: parsed.options };
   }
 
   throw new Error(`Unrecognized LLM action: ${parsed.action}`);
