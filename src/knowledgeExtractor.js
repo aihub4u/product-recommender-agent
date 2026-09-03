@@ -5,6 +5,53 @@ const MAX_PAGES = 13; // root page + up to 12 shallow-linked pages
 const MAX_CHARS_PER_PAGE = 20000;
 const FETCH_TIMEOUT_MS = 10000;
 
+function tableToMarkdown($, tableEl) {
+  const rows = [];
+  $(tableEl).find('tr').each((_, tr) => {
+    const cells = [];
+    $(tr).find('td, th').each((_, cell) => {
+      cells.push($(cell).text().trim().replace(/\|/g, '\\|').replace(/\s+/g, ' '));
+    });
+    if (cells.length) rows.push(cells);
+  });
+  if (rows.length === 0) return '';
+
+  const colCount = Math.max(...rows.map((r) => r.length));
+  const pad = (row) => { while (row.length < colCount) row.push(''); return row; };
+  const lines = [`| ${pad(rows[0]).join(' | ')} |`, `| ${Array(colCount).fill('---').join(' | ')} |`];
+  for (let i = 1; i < rows.length; i++) {
+    lines.push(`| ${pad(rows[i]).join(' | ')} |`);
+  }
+  return lines.join('\n');
+}
+
+// mammoth's extractRawText() flattens every table cell into a disconnected
+// blank-line-separated blob with no row/column association — e.g. a 2x2
+// pricing table becomes 6 unlabelled fragments in a row, genuinely
+// ambiguous to re-parse (a repeated value like "₹5,999" appearing for two
+// different plan/age combinations has no marker showing which is which).
+// convertToHtml() preserves real <table> structure, which we render back
+// out as markdown tables — unambiguous for both a human and an LLM to read.
+async function extractDocx(buffer) {
+  const mammoth = require('mammoth');
+  const result = await mammoth.convertToHtml({ buffer });
+  const $ = cheerio.load(result.value);
+  const parts = [];
+
+  $('body').children().each((_, el) => {
+    const tag = el.tagName ? el.tagName.toLowerCase() : '';
+    if (tag === 'table') {
+      const md = tableToMarkdown($, el);
+      if (md) parts.push(md);
+    } else {
+      const text = $(el).text().trim();
+      if (text) parts.push(text);
+    }
+  });
+
+  return parts.join('\n\n');
+}
+
 // ---- File extraction ----
 
 async function extractFromFile({ buffer, mimeType, filename }) {
@@ -17,9 +64,7 @@ async function extractFromFile({ buffer, mimeType, filename }) {
   }
 
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || lower.endsWith('.docx')) {
-    const mammoth = require('mammoth');
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
+    return extractDocx(buffer);
   }
 
   if (lower.endsWith('.txt') || lower.endsWith('.md') || mimeType?.startsWith('text/')) {
