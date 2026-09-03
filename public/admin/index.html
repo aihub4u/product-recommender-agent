@@ -1336,7 +1336,7 @@
             products: [{ id: 'MYV-0042', name: 'Wine Hued Elegance Lehenga', category: 'Lehenga', price: 8999, description: '...' }],
             engineUsed: 'llm',
             reasoning: 'Fits the wedding occasion and budget mentioned.',
-            ...(detail.guardrails.quickReplies && detail.guardrails.quickReplies.enabled ? { quickReplies: ['Under 5000?', 'Something festive?', detail.guardrails.quickReplies.finalLabel] } : {}),
+            ...(detail.guardrails.quickReplies && detail.guardrails.quickReplies.enabled ? { quickReplies: { followup1: 'Under 5000?', followup2: 'Something festive?', followup3: detail.guardrails.quickReplies.finalLabel } } : {}),
           }, null, 2),
         },
         {
@@ -1359,7 +1359,7 @@
         ['engineUsed', 'string', '"llm" or "rule" — which engine actually answered this turn.'],
         ['message', 'string', 'Only present when action is "blocked" — the configured guardrail reply.'],
         ['signalData', 'object', 'Only present when action equals the configured conversion signal name — the fields you defined for it in the Guardrails tab, as filled in by the model.'],
-        ['quickReplies', 'array', 'Only present when quick replies are enabled in Guardrails — always exactly 3 short strings, the last always the exact configured final option.'],
+        ['quickReplies', 'object', 'Only present when quick replies are enabled in Guardrails — an object with followup1, followup2, followup3 keys. followup3 is always the exact configured final option.'],
       ];
     } else {
       sampleResponses = [
@@ -1367,7 +1367,7 @@
           label: 'Response — reply',
           json: JSON.stringify({
             sessionId: '3fa2c1d0-...', action: 'reply', message: "We're open Mon-Sat, 9:30 AM to 6:30 PM IST.", engineUsed: 'llm',
-            ...(detail.guardrails.quickReplies && detail.guardrails.quickReplies.enabled ? { quickReplies: ['Check pricing', 'Ask a question', detail.guardrails.quickReplies.finalLabel] } : {}),
+            ...(detail.guardrails.quickReplies && detail.guardrails.quickReplies.enabled ? { quickReplies: { followup1: 'Check pricing', followup2: 'Ask a question', followup3: detail.guardrails.quickReplies.finalLabel } } : {}),
           }, null, 2),
         },
         {
@@ -1387,7 +1387,7 @@
         ['message', 'string', "The agent's reply text (for \"reply\"), the configured guardrail message (for \"blocked\"), or the model's natural closing reply if a conversion signal fired."],
         ['engineUsed', 'string', '"llm", or "none" if no LLM key is configured yet for this agent.'],
         ['signalData', 'object', 'Only present when action equals the configured conversion signal name — the fields you defined for it in the Guardrails tab, as filled in by the model.'],
-        ['quickReplies', 'array', 'Only present when quick replies are enabled in Guardrails — always exactly 3 short strings, the last always the exact configured final option.'],
+        ['quickReplies', 'object', 'Only present when quick replies are enabled in Guardrails — an object with followup1, followup2, followup3 keys. followup3 is always the exact configured final option.'],
       ];
     }
 

@@ -14,6 +14,14 @@ function formatProduct(p) {
   return { ...rest, price: priceValue !== null ? priceValue : p.price };
 }
 
+// Converts the guaranteed 3-item array from buildQuickReplies into the
+// followup1/followup2/followup3 shape the API returns. The array itself
+// stays the internal representation (simpler to build/test) — this is
+// purely the wire format.
+function toFollowupFields(arr) {
+  return { followup1: arr[0], followup2: arr[1], followup3: arr[2] };
+}
+
 function logIfLlm(project, result) {
   if (result.engineUsed === 'llm' && result.usage) {
     usageStore.logUsage({
@@ -113,7 +121,7 @@ router.post('/:slug/recommend', async (req, res) => {
       // conversion-signal turn is already handing off to another workflow.
       const qr = project.guardrails.quickReplies;
       const quickRepliesField = (qr && qr.enabled && !result.signal)
-        ? { quickReplies: buildQuickReplies(result.dynamicOptions, qr.finalLabel, qr.maxChars, qr.optionsPool) }
+        ? { quickReplies: toFollowupFields(buildQuickReplies(result.dynamicOptions, qr.finalLabel, qr.maxChars, qr.optionsPool)) }
         : {};
 
       return res.json({
@@ -156,7 +164,7 @@ router.post('/:slug/recommend', async (req, res) => {
     // Quick replies only make sense on a normal turn — a conversion-signal
     // turn is already handing off to another workflow.
     const quickRepliesField = (qr && qr.enabled && !result.signal)
-      ? { quickReplies: buildQuickReplies(result.dynamicOptions, qr.finalLabel, qr.maxChars, qr.optionsPool) }
+      ? { quickReplies: toFollowupFields(buildQuickReplies(result.dynamicOptions, qr.finalLabel, qr.maxChars, qr.optionsPool)) }
       : {};
 
     if (result.action === 'clarify') {
