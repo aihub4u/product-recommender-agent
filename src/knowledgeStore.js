@@ -1,6 +1,6 @@
 const db = require('./db');
 const { extractFromFile, crawlWebsite } = require('./knowledgeExtractor');
-const { chunkText, embedTexts, retrieveTopK } = require('./embeddings');
+const { chunkText, chunkByHeadings, embedTexts, retrieveTopK } = require('./embeddings');
 
 // slug -> [{ id, content, embedding, sourceId, sourceName }]
 const chunkCache = new Map();
@@ -80,7 +80,7 @@ async function ingestFile({ projectId, slug, embeddingKey, embeddingModel, filen
     const text = await extractFromFile({ buffer, mimeType, filename });
     if (!text || text.trim().length < 20) throw new Error('No extractable text found in this file.');
 
-    const chunks = chunkText(text);
+    const chunks = chunkByHeadings(text);
     if (chunks.length === 0) throw new Error('Document produced no usable chunks after extraction.');
 
     const embeddings = await embedTexts({ apiKey: embeddingKey, model: embeddingModel, texts: chunks });

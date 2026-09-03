@@ -5,6 +5,14 @@ const MAX_PAGES = 13; // root page + up to 12 shallow-linked pages
 const MAX_CHARS_PER_PAGE = 20000;
 const FETCH_TIMEOUT_MS = 10000;
 
+// A wholly-bold paragraph is a heading candidate. Many docs also use bold
+// for short lead-in emphasis within a section ("Never quote the base price
+// alone") — those aren't real section breaks. Only paragraphs that ALSO
+// match the document's own numbering convention ("1.", "1.1", "Q31.",
+// "Q41a.") are treated as genuine concept boundaries; everything else stays
+// attached to whichever section it falls under.
+const HEADING_NUMBERING_PATTERN = /^(\d+(\.\d+)*\.?\s+\S|Q\d+[a-z]?\.\s*\S)/;
+
 function tableToMarkdown($, tableEl) {
   const rows = [];
   $(tableEl).find('tr').each((_, tr) => {
@@ -43,9 +51,24 @@ async function extractDocx(buffer) {
     if (tag === 'table') {
       const md = tableToMarkdown($, el);
       if (md) parts.push(md);
+      return;
+    }
+
+    const $el = $(el);
+    const text = $el.text().trim();
+    if (!text) return;
+
+    const contents = $el.contents();
+    const isWhollyBold = contents.length === 1 && contents[0].tagName === 'strong';
+
+    if (isWhollyBold && HEADING_NUMBERING_PATTERN.test(text)) {
+      // A genuine numbered section/question heading — marked as a markdown
+      // H2 so the chunker can use it as a concept boundary (§ knowledgeStore
+      // heading-aware chunking). This is the platform's own convention, not
+      // part of the source document.
+      parts.push(`## ${text}`);
     } else {
-      const text = $(el).text().trim();
-      if (text) parts.push(text);
+      parts.push(text);
     }
   });
 

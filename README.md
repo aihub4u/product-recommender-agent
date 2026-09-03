@@ -391,6 +391,52 @@ workflow, follow-up buttons for continuing the conversation don't make sense.
 returns the 3 strings in the JSON response; turning them into actual WhatsApp interactive
 buttons is your integration layer's job, same as everything else in this API.
 
+## Knowledge Base: heading-aware chunking (not blind word-count chunking)
+
+Uploaded DOCX files are chunked by the document's own section structure, not
+a blind 220-word sliding window. This targets a real, confirmed failure
+mode: blind chunking can split a table (or a rule) away from the fact it
+governs, or leave a chunk that reads as internally ambiguous even when
+retrieval finds it — verified this directly by extracting a real customer
+knowledge base and finding a pricing table where the same figure (₹5,999)
+appeared for two different plan/age combinations with nothing distinguishing
+which was which, once flattened to plain text.
+
+**How it works**: during DOCX extraction, a paragraph is treated as a real
+section heading only if it's *entirely* bold AND matches the document's own
+numbering convention (`1.`, `2.4`, `Q31.`) — a bolded lead-in sentence
+inside a paragraph ("**Never quote the base price alone**") is left as
+emphasis, not treated as a new section boundary, since promoting every bold
+phrase to a heading would fragment content that belongs together. Each
+detected heading becomes a "concept" — embedded and retrieved as one
+complete, self-contained unit, e.g. a pricing table, its usage rule, and
+the guardrail against quoting it incorrectly all stay together, because
+they're all under the same "2.4 Pricing" heading in the source.
+
+**Table structure is preserved, not flattened.** DOCX tables are converted
+to real markdown tables (`| Plan | Price |`) during extraction instead of
+mammoth's default behavior, which discards row/column structure entirely
+and turns each cell into a disconnected text blob — verified this was the
+root cause of the specific pricing-table ambiguity mentioned above.
+
+**Oversized sections and near-empty ones are both handled**: a section
+that's mostly one very long table (a glossary, an edge-case reference
+table) gets split by table row groups with the header row repeated in each
+group, rather than left as one giant chunk or blindly cut mid-table. A bare
+chapter heading with little or no body of its own (e.g. "2. MEMBERSHIP..."
+immediately followed by "2.1 The two plans") gets folded forward as a
+breadcrumb onto its first real subsection instead of wasting a near-empty
+chunk.
+
+**Falls back automatically** to the previous word-count chunking for
+content with no detected headings — plain text/markdown uploads, website
+crawling, and any DOCX that doesn't use this bold-numbered-heading
+convention are entirely unaffected.
+
+**This only affects newly-indexed documents.** Anything already indexed
+before this update keeps its old chunking until you delete and re-upload it
+from the Knowledge tab.
+
 ## Conversion / handoff signal — flagging "ready to convert" in the API response
 
 Every agent's **Guardrails** tab has a **Conversion / handoff signal** section. This
